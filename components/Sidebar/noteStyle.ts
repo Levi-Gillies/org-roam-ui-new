@@ -6,23 +6,23 @@ export const viewerNoteStyle = {
   '.outlineHeadingButton': {
     display: 'none',
   },
-  h1: { color: 'black', lineHeight: '1.2', fontSize: '16', fontWeight: 'bold', paddingTop: 2 },
+  h1: { color: 'inherit', lineHeight: '1.2', fontSize: '16', fontWeight: 'bold', paddingTop: 2 },
   h2: {
     fontSize: '14',
-    color: 'black',
+    color: 'inherit',
     fontWeight: 'bold',
     fontStyle: 'bold italic',
     paddingTop: 2,
   },
   h3: {
     fontSize: '13',
-    color: 'black',
+    color: 'inherit',
     paddingTop: 2,
   },
   h4: {
     fontSize: '12',
     fontStyle: 'italic',
-    color: 'black',
+    color: 'inherit',
     paddingTop: 2,
   },
 
@@ -57,7 +57,7 @@ export const outlineNoteStyle = {
   'h1,h2,h3,h4,h5,h6,h7,h8': {
     pl: 1,
     lineHeight: '1.25',
-    color: 'black',
+    color: 'inherit',
     fontSize: 15,
     fontWeight: 700,
   },
@@ -150,7 +150,7 @@ export const defaultNoteStyle = {
   '.DONE': { color: 'green' },
   '.priority': { fontFamily: 'monospace', color: 'orange' },
   '.tag': {
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     fontFamily: 'monospace',
     padding: '2px',
     fontSize: '80%',
@@ -168,7 +168,7 @@ export const defaultNoteStyle = {
   pre: {
     //border: '1px solid #e6e6e6',
     borderRadius: '3px',
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     padding: '8pt',
     fontFamily: 'monospace',
     overflow: 'auto',
@@ -185,7 +185,7 @@ export const defaultNoteStyle = {
     right: '12px',
     padding: '3px',
     //color: '#555',
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   'caption.t-above': { captionSide: 'top' },
   'caption.t-bottom': { captionSide: 'bottom' },

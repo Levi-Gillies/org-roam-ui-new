@@ -102,8 +102,8 @@ const Sidebar = (props: SidebarProps) => {
         <button className="floating-sidebar-close" onClick={onClose}>
           &times;
         </button>
-        <Flex flexDir="column" h="100%" pl={2} color="black" width="100%">
-          <Flex pl={2} alignItems="center" color="black" width="100%" pt={2}>
+        <Flex flexDir="column" h="100%" pl={2} width="100%">
+          <Flex pl={2} alignItems="center" width="100%" pt={2}>
             <Flex pt={1} flexShrink={0}>
               <Toolbar
                 {...{
