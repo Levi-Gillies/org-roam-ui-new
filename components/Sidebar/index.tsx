@@ -5,24 +5,13 @@ import { TagBar } from './TagBar'
 import { Note } from './Note'
 import { Title } from './Title'
 
-import { VStack, Flex, Box, IconButton } from '@chakra-ui/react'
-import { Collapse } from './Collapse'
+import { VStack, Flex, Box } from '@chakra-ui/react'
 import { Scrollbars } from 'react-custom-scrollbars-2'
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CloseIcon,
-  HamburgerIcon,
-  ViewIcon,
-  ViewOffIcon,
-} from '@chakra-ui/icons'
-import { BiDotsVerticalRounded, BiFile, BiNetworkChart } from 'react-icons/bi'
 
 import { GraphData, NodeObject, LinkObject } from 'force-graph'
 import { OrgRoamNode } from '../../api'
 import { ThemeContext } from '../../util/themecontext'
 import { LinksByNodeId, NodeByCite, NodeById, Scope } from '../../pages/index'
-import { Resizable } from 're-resizable'
 import { usePersistantState } from '../../util/persistant-state'
 import { initialFilter, TagColors } from '../config'
 
@@ -85,7 +74,6 @@ const Sidebar = (props: SidebarProps) => {
 
   const { highlightColor } = useContext(ThemeContext)
   const [previewRoamNode, setPreviewRoamNode] = useState<OrgRoamNode | undefined>()
-  const [sidebarWidth, setSidebarWidth] = usePersistantState<number>('sidebarWidth', 400)
 
   useEffect(() => {
     if (!previewNode?.id) {
@@ -97,110 +85,49 @@ const Sidebar = (props: SidebarProps) => {
   }, [previewNode?.id])
 
   const [justification, setJustification] = usePersistantState('justification', 1)
-  const [outline, setOutline] = usePersistantState('outline', false)
+  const [outline, setOutline] = usePersistantState('outline', true)
   const justificationList = ['justify', 'start', 'end', 'center']
   const [font, setFont] = useState('sans serif')
   const [indent, setIndent] = useState(0)
   const [collapse, setCollapse] = useState(false)
-  //maybe want to close it when clicking outside, but not sure
-  //const outsideClickRef = useRef();
+
+  if (!isOpen) {
+    return null
+  }
+
   return (
-    <Collapse
-      animateOpacity={false}
-      dimension="width"
-      in={isOpen}
-      //style={{ position: 'relative' }}
-      unmountOnExit
-      startingSize={0}
-      style={{ height: '100vh' }}
-    >
-      <Resizable
-        size={{ height: '100vh', width: sidebarWidth }}
-        onResizeStop={(e, direction, ref, d) => {
-          setSidebarWidth((curr: number) => curr + d.width)
-        }}
-        enable={{
-          top: false,
-          right: false,
-          bottom: false,
-          left: true,
-          topRight: false,
-          bottomRight: false,
-          bottomLeft: false,
-          topLeft: false,
-        }}
-        minWidth="220px"
-        maxWidth={windowWidth - 200}
-      >
-        <Flex flexDir="column" h="100vh" pl={2} color="black" bg="alt.100" width="100%">
-          <Flex
-            //whiteSpace="nowrap"
-            // overflow="hidden"
-            // textOverflow="ellipsis"
-            pl={2}
-            alignItems="center"
-            color="black"
-            width="100%"
-          >
+    <>
+      <div className="floating-sidebar-backdrop" onClick={onClose} />
+      <div className="floating-sidebar">
+        <button className="floating-sidebar-close" onClick={onClose}>
+          &times;
+        </button>
+        <Flex flexDir="column" h="100%" pl={2} color="black" width="100%">
+          <Flex pl={2} alignItems="center" color="black" width="100%" pt={2}>
             <Flex pt={1} flexShrink={0}>
               <Toolbar
                 {...{
-                  setJustification,
-                  setIndent,
-                  setFont,
-                  justification,
                   setPreviewNode,
                   canUndo,
                   canRedo,
                   resetPreviewNode,
                   previousPreviewNode,
                   nextPreviewNode,
-                  outline,
-                  setOutline,
                   collapse,
                   setCollapse,
                 }}
               />
             </Flex>
-            <Flex
-              whiteSpace="nowrap"
-              textOverflow="ellipsis"
-              overflow="hidden"
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openContextMenu(previewNode, e)
-              }}
-            ></Flex>
-            <Flex flexDir="row" ml="auto">
-              <IconButton
-                // eslint-disable-next-line react/jsx-no-undef
-                m={1}
-                icon={<BiDotsVerticalRounded />}
-                aria-label="Options"
-                variant="subtle"
-                onClick={(e) => {
-                  openContextMenu(previewNode, e, {
-                    left: undefined,
-                    top: 12,
-                    right: -windowWidth + 20,
-                    bottom: undefined,
-                  })
-                }}
-              />
-            </Flex>
           </Flex>
           <Scrollbars
-            //autoHeight
-            //autoHeightMax={600}
             autoHide
+            style={{ flexGrow: 1 }}
             renderThumbVertical={({ style, ...props }) => (
               <Box
                 style={{
                   ...style,
                   borderRadius: 0,
-                  // backgroundColor: highlightColor,
                 }}
-                //color="alt.100"
                 {...props}
               />
             )}
@@ -208,10 +135,10 @@ const Sidebar = (props: SidebarProps) => {
             {previewRoamNode && (
               <VStack
                 flexGrow={1}
-                // overflowY="scroll"
                 alignItems="left"
-                bg="alt.100"
                 paddingLeft={4}
+                paddingRight={4}
+                paddingBottom={4}
               >
                 <Title previewNode={previewRoamNode} />
                 <TagBar
@@ -240,8 +167,8 @@ const Sidebar = (props: SidebarProps) => {
             )}
           </Scrollbars>
         </Flex>
-      </Resizable>
-    </Collapse>
+      </div>
+    </>
   )
 }
 

@@ -1,10 +1,7 @@
-import { HamburgerIcon } from '@chakra-ui/icons'
 import {
   Box,
   Flex,
-  Heading,
   IconButton,
-  Slide,
   Tooltip,
   useDisclosure,
   useOutsideClick,
@@ -29,8 +26,6 @@ import type {
   ForceGraph2D as TForceGraph2D,
   ForceGraph3D as TForceGraph3D,
 } from 'react-force-graph'
-import { BiNetworkChart } from 'react-icons/bi'
-import { BsReverseLayoutSidebarInsetReverse } from 'react-icons/bs'
 import ReconnectingWebSocket from 'reconnecting-websocket'
 import SpriteText from 'three-spritetext'
 import useUndo from 'use-undo'
@@ -49,7 +44,6 @@ import {
 } from '../components/config'
 import { ContextMenu } from '../components/contextmenu'
 import Sidebar from '../components/Sidebar'
-import { Tweaks } from '../components/Tweaks'
 import { usePersistantState } from '../util/persistant-state'
 import { ThemeContext, ThemeContextProps } from '../util/themecontext'
 import { openNodeInEmacs } from '../util/webSocketFunctions'
@@ -91,6 +85,111 @@ export type Tags = string[]
 export type Scope = {
   nodeIds: string[]
   excludedNodeIds: string[]
+}
+
+interface SearchBarProps {
+  graphData: GraphData | null
+  nodeById: NodeById
+  setPreviewNode: any
+  graphRef: any
+  threeDim: boolean
+}
+
+function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim }: SearchBarProps) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<OrgRoamNode[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [showResults, setShowResults] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!query.trim() || !graphData) {
+      setResults([])
+      setShowResults(false)
+      return
+    }
+    const q = query.toLowerCase()
+    const matches = graphData.nodes
+      .filter((node: any) => {
+        const n = node as OrgRoamNode
+        return n.title && n.title.toLowerCase().includes(q)
+      })
+      .slice(0, 20) as OrgRoamNode[]
+    setResults(matches)
+    setActiveIndex(0)
+    setShowResults(matches.length > 0)
+  }, [query, graphData])
+
+  const selectNode = (node: OrgRoamNode) => {
+    setPreviewNode(node)
+    setQuery('')
+    setShowResults(false)
+
+    // Zoom to node — x/y/z are added at runtime by force-graph
+    const fg = graphRef.current
+    const n = node as any
+    if (fg && n.x !== undefined && n.y !== undefined) {
+      if (threeDim) {
+        const distance = 200
+        const distRatio = 1 + distance / Math.hypot(n.x, n.y, n.z || 0)
+        fg.cameraPosition(
+          { x: n.x * distRatio, y: n.y * distRatio, z: (n.z || 0) * distRatio },
+          { x: n.x, y: n.y, z: n.z || 0 },
+          1000,
+        )
+      } else {
+        fg.centerAt(n.x, n.y, 1000)
+        fg.zoom(4, 1000)
+      }
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter' && results[activeIndex]) {
+      e.preventDefault()
+      selectNode(results[activeIndex])
+    } else if (e.key === 'Escape') {
+      setShowResults(false)
+      inputRef.current?.blur()
+    }
+  }
+
+  return (
+    <div className="search-container" ref={containerRef}>
+      <input
+        ref={inputRef}
+        className="search-input"
+        type="text"
+        placeholder="Search nodes..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => results.length > 0 && setShowResults(true)}
+        onBlur={() => setTimeout(() => setShowResults(false), 200)}
+      />
+      {showResults && (
+        <div className="search-results">
+          {results.map((node, i) => (
+            <div
+              key={node.id}
+              className={`search-result-item${i === activeIndex ? ' active' : ''}`}
+              onMouseDown={() => selectNode(node)}
+              onMouseEnter={() => setActiveIndex(i)}
+            >
+              {node.title}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function Home() {
@@ -569,28 +668,12 @@ export function GraphPage() {
         height="100vh"
         overflow="clip"
       >
-        <Tweaks
-          {...{
-            physics,
-            setPhysics,
-            threeDim,
-            setThreeDim,
-            filter,
-            setFilter,
-            visuals,
-            setVisuals,
-            mouse,
-            setMouse,
-            behavior,
-            setBehavior,
-            tagColors,
-            setTagColors,
-            coloring,
-            setColoring,
-            local,
-            setLocal,
-          }}
-          tags={tagsRef.current}
+        <SearchBar
+          graphData={graphData}
+          nodeById={nodeByIdRef.current!}
+          setPreviewNode={setPreviewNode}
+          graphRef={graphRef}
+          threeDim={threeDim}
         />
         <Box position="absolute">
           {graphData && (
@@ -630,78 +713,35 @@ export function GraphPage() {
             />
           )}
         </Box>
-        <Box position="relative" zIndex={4} width="100%">
-          <Flex className="headerBar" h={10} flexDir="column">
-            <Flex alignItems="center" h={10} justifyContent="flex-end">
-              {/* <Flex flexDir="row" alignItems="center">
-               *   <Box color="blue.500" bgColor="alt.100" h="100%" p={3} mr={4}>
-               *     {mainItem.icon}
-               *   </Box>
-               *   <Heading size="sm">{mainItem.title}</Heading>
-               * </Flex> */}
-              <Flex height="100%" flexDirection="row">
-                {scope.nodeIds.length > 0 && (
-                  <Tooltip label="Return to main graph">
-                    <IconButton
-                      m={1}
-                      icon={<BiNetworkChart />}
-                      aria-label="Exit local mode"
-                      onClick={() =>
-                        setScope((currentScope: Scope) => ({
-                          ...currentScope,
-                          nodeIds: [],
-                        }))
-                      }
-                      variant="subtle"
-                    />
-                  </Tooltip>
-                )}
-                <Tooltip label={isOpen ? 'Close sidebar' : 'Open sidebar'}>
-                  <IconButton
-                    m={1}
-                    // eslint-disable-next-line react/jsx-no-undef
-                    icon={<BsReverseLayoutSidebarInsetReverse />}
-                    aria-label="Close file-viewer"
-                    variant="subtle"
-                    onClick={isOpen ? onClose : onOpen}
-                  />
-                </Tooltip>
-              </Flex>
-            </Flex>
-          </Flex>
-        </Box>
-
-        <Box position="relative" zIndex={4}>
-          <Sidebar
-            {...{
-              isOpen,
-              onOpen,
-              onClose,
-              previewNode,
-              setPreviewNode,
-              canUndo,
-              canRedo,
-              previousPreviewNode,
-              nextPreviewNode,
-              resetPreviewNode,
-              setSidebarHighlightedNode,
-              openContextMenu,
-              scope,
-              setScope,
-              windowWidth,
-              tagColors,
-              setTagColors,
-              filter,
-              setFilter,
-            }}
-            macros={emacsVariables.katexMacros}
-            attachDir={emacsVariables.attachDir || ''}
-            useInheritance={emacsVariables.useInheritance || false}
-            nodeById={nodeByIdRef.current!}
-            linksByNodeId={linksByNodeIdRef.current!}
-            nodeByCite={nodeByCiteRef.current!}
-          />
-        </Box>
+        <Sidebar
+          {...{
+            isOpen,
+            onOpen,
+            onClose,
+            previewNode,
+            setPreviewNode,
+            canUndo,
+            canRedo,
+            previousPreviewNode,
+            nextPreviewNode,
+            resetPreviewNode,
+            setSidebarHighlightedNode,
+            openContextMenu,
+            scope,
+            setScope,
+            windowWidth,
+            tagColors,
+            setTagColors,
+            filter,
+            setFilter,
+          }}
+          macros={emacsVariables.katexMacros}
+          attachDir={emacsVariables.attachDir || ''}
+          useInheritance={emacsVariables.useInheritance || false}
+          nodeById={nodeByIdRef.current!}
+          linksByNodeId={linksByNodeIdRef.current!}
+          nodeByCite={nodeByCiteRef.current!}
+        />
         {contextMenu.isOpen && (
           <div ref={contextMenuRef}>
             <ContextMenu
@@ -1170,7 +1210,7 @@ export const Graph = function (props: GraphProps) {
     graphData: scope.nodeIds.length ? scopedGraphData : filteredGraphData,
     width: windowWidth,
     height: windowHeight,
-    backgroundColor: getThemeColor(visuals.backgroundColor, theme),
+    backgroundColor: visuals.backgroundColor === 'transparent' ? 'rgba(0,0,0,0)' : getThemeColor(visuals.backgroundColor, theme),
     warmupTicks: scope.nodeIds.length === 1 ? 100 : scope.nodeIds.length > 1 ? 20 : 0,
     onZoom: ({ k, x, y }) => (scaleRef.current = k),
     nodeColor: (node) => {
@@ -1353,6 +1393,7 @@ export const Graph = function (props: GraphProps) {
         <ForceGraph3D
           ref={graphRef}
           {...graphCommonProps}
+          {...({ showNavInfo: false } as any)}
           nodeThreeObjectExtend={true}
           nodeOpacity={visuals.nodeOpacity}
           nodeResolution={visuals.nodeResolution}
@@ -1377,6 +1418,7 @@ export const Graph = function (props: GraphProps) {
         <ForceGraph2D
           ref={graphRef}
           {...graphCommonProps}
+          {...({ showNavInfo: false } as any)}
           linkLineDash={(link) => {
             const linkArg = link as OrgRoamLink
             if (visuals.citeDashes && linkArg.type?.includes('cite')) {
