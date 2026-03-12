@@ -1078,6 +1078,7 @@ export const Graph = function (props: GraphProps) {
   useEffect(() => {
     ;(async () => {
       const fg = graphRef.current
+      if (!fg) return
       const d3 = await d3promise
       if (physics.gravityOn && !(scope.nodeIds.length && !physics.gravityLocal)) {
         fg.d3Force('x', d3.forceX().strength(physics.gravity))
@@ -1279,21 +1280,21 @@ export const Graph = function (props: GraphProps) {
 
       if (visuals.refLinkColor && roamLink.type === 'ref') {
         return needsHighlighting && (visuals.refLinkHighlightColor || visuals.linkHighlight)
-          ? highlightColors[visuals.refLinkColor][
+          ? highlightColors[visuals.refLinkColor]?.[
               visuals.refLinkHighlightColor || visuals.linkHighlight
-            ](opacity)
-          : highlightColors[visuals.refLinkColor][visuals.backgroundColor](
+            ]?.(opacity) ?? getThemeColor(visuals.refLinkColor, theme)
+          : highlightColors[visuals.refLinkColor]?.[visuals.backgroundColor]?.(
               visuals.highlightFade * opacity,
-            )
+            ) ?? getThemeColor(visuals.refLinkColor, theme)
       }
       if (visuals.citeLinkColor && roamLink.type?.includes('cite')) {
         return needsHighlighting && (visuals.citeLinkHighlightColor || visuals.linkHighlight)
-          ? highlightColors[visuals.citeLinkColor][
+          ? highlightColors[visuals.citeLinkColor]?.[
               visuals.citeLinkHighlightColor || visuals.linkHighlight
-            ](opacity)
-          : highlightColors[visuals.citeLinkColor][visuals.backgroundColor](
+            ]?.(opacity) ?? getThemeColor(visuals.citeLinkColor, theme)
+          : highlightColors[visuals.citeLinkColor]?.[visuals.backgroundColor]?.(
               visuals.highlightFade * opacity,
-            )
+            ) ?? getThemeColor(visuals.citeLinkColor, theme)
       }
 
       return getLinkColor({

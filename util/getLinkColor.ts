@@ -47,13 +47,14 @@ export const getLinkColor = ({
       coloring,
       cluster,
     })
-    return highlightColors[nodeColor][visuals.backgroundColor](visuals.highlightFade * opacity)
+    return highlightColors[nodeColor]?.[visuals.backgroundColor]?.(visuals.highlightFade * opacity) ??
+      getThemeColor(nodeColor, theme)
   }
 
   if (!needsHighlighting) {
-    return highlightColors[visuals.linkColorScheme][visuals.backgroundColor](
+    return highlightColors[visuals.linkColorScheme]?.[visuals.backgroundColor]?.(
       visuals.highlightFade * opacity,
-    )
+    ) ?? getThemeColor(visuals.linkColorScheme, theme)
   }
 
   if (!visuals.linkHighlight && !visuals.linkColorScheme) {
@@ -73,10 +74,11 @@ export const getLinkColor = ({
   }
 
   if (!visuals.linkColorScheme) {
-    return highlightColors[
-      getLinkNodeColor({ sourceId, targetId, linksByNodeId, visuals, coloring, cluster })
-    ][visuals.linkHighlight](opacity)
+    const nodeColor = getLinkNodeColor({ sourceId, targetId, linksByNodeId, visuals, coloring, cluster })
+    return highlightColors[nodeColor]?.[visuals.linkHighlight]?.(opacity) ??
+      getThemeColor(nodeColor, theme)
   }
 
-  return highlightColors[visuals.linkColorScheme][visuals.linkHighlight](opacity)
+  return highlightColors[visuals.linkColorScheme]?.[visuals.linkHighlight]?.(opacity) ??
+    getThemeColor(visuals.linkColorScheme, theme)
 }
