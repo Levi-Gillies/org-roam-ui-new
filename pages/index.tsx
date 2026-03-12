@@ -51,6 +51,7 @@ import { drawLabels } from '../components/Graph/drawLabels'
 import { VariablesContext } from '../util/variablesContext'
 import { findNthNeighbors } from '../util/findNthNeighbour'
 import { getThemeColor } from '../util/getThemeColor'
+import { interpolateColors } from '../util/interpolateColors'
 import { normalizeLinkEnds } from '../util/normalizeLinkEnds'
 import { nodeSize } from '../util/nodeSize'
 import { getNodeColor } from '../util/getNodeColor'
@@ -1280,19 +1281,19 @@ export const Graph = function (props: GraphProps) {
 
       if (visuals.refLinkColor && roamLink.type === 'ref') {
         return needsHighlighting && (visuals.refLinkHighlightColor || visuals.linkHighlight)
-          ? highlightColors[visuals.refLinkColor]?.[
-              visuals.refLinkHighlightColor || visuals.linkHighlight
-            ]?.(opacity) ?? getThemeColor(visuals.refLinkColor, theme)
-          : highlightColors[visuals.refLinkColor]?.[visuals.backgroundColor]?.(
+          ? interpolateColors(highlightColors, visuals.refLinkColor,
+              visuals.refLinkHighlightColor || visuals.linkHighlight,
+              opacity) ?? getThemeColor(visuals.refLinkColor, theme)
+          : interpolateColors(highlightColors, visuals.refLinkColor, visuals.backgroundColor,
               visuals.highlightFade * opacity,
             ) ?? getThemeColor(visuals.refLinkColor, theme)
       }
       if (visuals.citeLinkColor && roamLink.type?.includes('cite')) {
         return needsHighlighting && (visuals.citeLinkHighlightColor || visuals.linkHighlight)
-          ? highlightColors[visuals.citeLinkColor]?.[
-              visuals.citeLinkHighlightColor || visuals.linkHighlight
-            ]?.(opacity) ?? getThemeColor(visuals.citeLinkColor, theme)
-          : highlightColors[visuals.citeLinkColor]?.[visuals.backgroundColor]?.(
+          ? interpolateColors(highlightColors, visuals.citeLinkColor,
+              visuals.citeLinkHighlightColor || visuals.linkHighlight,
+              opacity) ?? getThemeColor(visuals.citeLinkColor, theme)
+          : interpolateColors(highlightColors, visuals.citeLinkColor, visuals.backgroundColor,
               visuals.highlightFade * opacity,
             ) ?? getThemeColor(visuals.citeLinkColor, theme)
       }
