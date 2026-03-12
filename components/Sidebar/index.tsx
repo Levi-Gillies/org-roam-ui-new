@@ -1,6 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from 'react'
 
-import { Toolbar } from './Toolbar'
 import { TagBar } from './TagBar'
 import { Note } from './Note'
 import { Title } from './Title'
@@ -25,11 +24,6 @@ export interface SidebarProps {
   linksByNodeId: LinksByNodeId
   nodeByCite: NodeByCite
   setSidebarHighlightedNode: any
-  canUndo: any
-  canRedo: any
-  resetPreviewNode: any
-  previousPreviewNode: any
-  nextPreviewNode: any
   openContextMenu: any
   scope: Scope
   setScope: any
@@ -41,7 +35,17 @@ export interface SidebarProps {
   macros?: { [key: string]: string }
   attachDir: string
   useInheritance: boolean
+  collapse: boolean
+  setCollapse: (fn: (c: boolean) => boolean) => void
   scrollRef?: (instance: any) => void
+  isInsertMode?: boolean
+  insertModeText?: string
+  setInsertModeText?: (text: string) => void
+  isVisualMode?: boolean
+  inNodeSearch?: boolean
+  inNodeSearchQuery?: string
+  inNodeSearchMatchCount?: number
+  inNodeSearchCurrentIndex?: number
 }
 
 const Sidebar = (props: SidebarProps) => {
@@ -55,11 +59,6 @@ const Sidebar = (props: SidebarProps) => {
     linksByNodeId,
     nodeByCite,
     setSidebarHighlightedNode,
-    canUndo,
-    canRedo,
-    resetPreviewNode,
-    previousPreviewNode,
-    nextPreviewNode,
     openContextMenu,
     scope,
     setScope,
@@ -71,7 +70,17 @@ const Sidebar = (props: SidebarProps) => {
     macros,
     attachDir,
     useInheritance,
+    collapse,
+    setCollapse,
     scrollRef,
+    isInsertMode,
+    insertModeText,
+    setInsertModeText,
+    isVisualMode,
+    inNodeSearch,
+    inNodeSearchQuery,
+    inNodeSearchMatchCount,
+    inNodeSearchCurrentIndex,
   } = props
 
   const { highlightColor } = useContext(ThemeContext)
@@ -91,7 +100,6 @@ const Sidebar = (props: SidebarProps) => {
   const justificationList = ['justify', 'start', 'end', 'center']
   const [font, setFont] = useState('sans serif')
   const [indent, setIndent] = useState(0)
-  const [collapse, setCollapse] = useState(false)
 
   if (!isOpen) {
     return null
@@ -100,76 +108,81 @@ const Sidebar = (props: SidebarProps) => {
   return (
     <>
       <div className="floating-sidebar-backdrop" onClick={onClose} />
-      <div className="floating-sidebar">
-        <button className="floating-sidebar-close" onClick={onClose}>
-          &times;
-        </button>
+      <div className={`floating-sidebar${isVisualMode ? ' visual-mode' : ''}`}>
         <Flex flexDir="column" h="100%" pl={2} width="100%">
-          <Flex pl={2} alignItems="center" width="100%" pt={2}>
-            <Flex pt={1} flexShrink={0}>
-              <Toolbar
-                {...{
-                  setPreviewNode,
-                  canUndo,
-                  canRedo,
-                  resetPreviewNode,
-                  previousPreviewNode,
-                  nextPreviewNode,
-                  collapse,
-                  setCollapse,
-                }}
-              />
-            </Flex>
-          </Flex>
-          <Scrollbars
-            ref={(instance: any) => { if (scrollRef) scrollRef(instance) }}
-            autoHide
-            style={{ flexGrow: 1 }}
-            renderThumbVertical={({ style, ...props }) => (
-              <Box
-                style={{
-                  ...style,
-                  borderRadius: 0,
-                }}
-                {...props}
-              />
-            )}
-          >
-            {previewRoamNode && (
-              <VStack
-                flexGrow={1}
-                alignItems="left"
-                paddingLeft={4}
-                paddingRight={4}
-                paddingBottom={4}
-              >
-                <Title previewNode={previewRoamNode} />
-                <TagBar
-                  {...{ filter, setFilter, tagColors, setTagColors, openContextMenu, previewNode }}
-                />
-                <Note
-                  {...{
-                    setPreviewNode,
-                    previewNode,
-                    nodeById,
-                    nodeByCite,
-                    setSidebarHighlightedNode,
-                    justification,
-                    justificationList,
-                    linksByNodeId,
-                    openContextMenu,
-                    outline,
-                    setOutline,
-                    collapse,
-                    macros,
-                    attachDir,
-                    useInheritance,
+          {isInsertMode ? (
+            <textarea
+              className="insert-mode-textarea"
+              value={insertModeText || ''}
+              onChange={(e) => setInsertModeText?.(e.target.value)}
+              autoFocus
+            />
+          ) : (
+            <Scrollbars
+              ref={(instance: any) => { if (scrollRef) scrollRef(instance) }}
+              autoHide
+              style={{ flexGrow: 1 }}
+              renderThumbVertical={({ style, ...props }) => (
+                <Box
+                  style={{
+                    ...style,
+                    borderRadius: 0,
                   }}
+                  {...props}
                 />
-              </VStack>
-            )}
-          </Scrollbars>
+              )}
+            >
+              {previewRoamNode && (
+                <VStack
+                  flexGrow={1}
+                  alignItems="left"
+                  paddingLeft={4}
+                  paddingRight={4}
+                  paddingTop={3}
+                  paddingBottom={4}
+                >
+                  <Title previewNode={previewRoamNode} />
+                  <TagBar
+                    {...{ filter, setFilter, tagColors, setTagColors, openContextMenu, previewNode }}
+                  />
+                  <Note
+                    {...{
+                      setPreviewNode,
+                      previewNode,
+                      nodeById,
+                      nodeByCite,
+                      setSidebarHighlightedNode,
+                      justification,
+                      justificationList,
+                      linksByNodeId,
+                      openContextMenu,
+                      outline,
+                      setOutline,
+                      collapse,
+                      macros,
+                      attachDir,
+                      useInheritance,
+                    }}
+                  />
+                </VStack>
+              )}
+            </Scrollbars>
+          )}
         </Flex>
+        {inNodeSearch && (
+          <div className="in-node-search-bar">
+            <span className="in-node-search-prefix">/</span>
+            <span className="in-node-search-query">{inNodeSearchQuery}</span>
+            {(inNodeSearchMatchCount ?? 0) > 0 && (
+              <span className="in-node-search-count">
+                [{(inNodeSearchCurrentIndex ?? 0) + 1}/{inNodeSearchMatchCount}]
+              </span>
+            )}
+            {inNodeSearchMatchCount === 0 && inNodeSearchQuery && (
+              <span className="in-node-search-count">[No matches]</span>
+            )}
+          </div>
+        )}
       </div>
     </>
   )

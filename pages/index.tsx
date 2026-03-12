@@ -99,9 +99,10 @@ interface SearchBarProps {
   visible: boolean
   onHide: () => void
   inputRef: React.RefObject<HTMLInputElement>
+  aboveSidebar?: boolean
 }
 
-function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, visible, onHide, inputRef }: SearchBarProps) {
+function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, visible, onHide, inputRef, aboveSidebar }: SearchBarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<OrgRoamNode[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -170,7 +171,7 @@ function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, vi
   }
 
   return (
-    <div className={`search-container${visible ? '' : ' hidden'}`} ref={containerRef}>
+    <div className={`search-container${visible ? '' : ' hidden'}${aboveSidebar ? ' search-above-sidebar' : ''}`} ref={containerRef}>
       <input
         ref={inputRef}
         className="search-input"
@@ -257,13 +258,28 @@ export function GraphPage() {
   // Vim keybinding state
   const [searchVisible, setSearchVisible] = useState(false)
   const [showVimHelp, setShowVimHelp] = useState(false)
-  const [vimMode, setVimMode] = useState<'normal' | 'search' | 'command'>('normal')
+  const [vimMode, setVimMode] = useState<'normal' | 'search' | 'command' | 'insert' | 'visual' | 'inNodeSearch'>('normal')
   const [commandBuffer, setCommandBuffer] = useState('')
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const commandInputRef = useRef<HTMLInputElement>(null)
   const sidebarScrollRef = useRef<any>(null)
   const pendingKeyTimerRef = useRef<any>(null)
+
+  // Collapse state (lifted from Sidebar for Tab keybinding)
+  const [collapse, setCollapse] = useState(false)
+
+  // Insert mode state
+  const [insertModeText, setInsertModeText] = useState('')
+  const insertModeNodeRef = useRef<OrgRoamNode | null>(null)
+  const saveTimerRef = useRef<any>(null)
+
+  // In-node search state
+  const [inNodeSearch, setInNodeSearch] = useState(false)
+  const [inNodeSearchQuery, setInNodeSearchQuery] = useState('')
+  const [inNodeSearchMatches, setInNodeSearchMatches] = useState<Range[]>([])
+  const [inNodeSearchCurrentIndex, setInNodeSearchCurrentIndex] = useState(0)
+  const inNodeSearchInputRef = useRef<HTMLInputElement>(null)
 
   const nodeByIdRef = useRef<NodeById>({})
   const linksByNodeIdRef = useRef<LinksByNodeId>({})
@@ -642,6 +658,151 @@ export function GraphPage() {
     }
   }, [onClose, setPreviewNode])
 
+  // In-node search: find and highlight matches when query changes
+  useEffect(() => {
+    if (!inNodeSearch || !inNodeSearchQuery) {
+      setInNodeSearchMatches([])
+      setInNodeSearchCurrentIndex(0)
+      if (typeof CSS !== 'undefined' && 'highlights' in CSS) {
+        ;(CSS as any).highlights.delete('in-node-search')
+        ;(CSS as any).highlights.delete('in-node-search-current')
+      }
+      return
+    }
+
+    const sidebar = document.querySelector('.floating-sidebar')
+    if (!sidebar) return
+
+    const ranges: Range[] = []
+    const walker = document.createTreeWalker(sidebar, NodeFilter.SHOW_TEXT)
+    const query = inNodeSearchQuery.toLowerCase()
+
+    let textNode: Text | null
+    while ((textNode = walker.nextNode() as Text | null)) {
+      const text = textNode.textContent?.toLowerCase() || ''
+      let startPos = 0
+      while (startPos < text.length) {
+        const idx = text.indexOf(query, startPos)
+        if (idx === -1) break
+        const range = new Range()
+        range.setStart(textNode, idx)
+        range.setEnd(textNode, idx + query.length)
+        ranges.push(range)
+        startPos = idx + 1
+      }
+    }
+
+    setInNodeSearchMatches(ranges)
+    setInNodeSearchCurrentIndex(0)
+  }, [inNodeSearchQuery, inNodeSearch])
+
+  // In-node search: update CSS Custom Highlights when matches or index changes
+  useEffect(() => {
+    if (typeof CSS === 'undefined' || !('highlights' in CSS)) return
+    if (inNodeSearchMatches.length === 0) {
+      ;(CSS as any).highlights.delete('in-node-search')
+      ;(CSS as any).highlights.delete('in-node-search-current')
+      return
+    }
+
+    const otherRanges = inNodeSearchMatches.filter((_, i) => i !== inNodeSearchCurrentIndex)
+    const currentRange = inNodeSearchMatches[inNodeSearchCurrentIndex]
+
+    if (otherRanges.length > 0) {
+      ;(CSS as any).highlights.set('in-node-search', new (window as any).Highlight(...otherRanges))
+    } else {
+      ;(CSS as any).highlights.delete('in-node-search')
+    }
+
+    if (currentRange) {
+      ;(CSS as any).highlights.set('in-node-search-current', new (window as any).Highlight(currentRange))
+      // Scroll match into view
+      const el = currentRange.startContainer.parentElement
+      el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    }
+  }, [inNodeSearchMatches, inNodeSearchCurrentIndex])
+
+  // Insert mode: enter
+  const enterInsertMode = useCallback(async () => {
+    const node = previewNode as OrgRoamNode
+    if (!node?.id) return
+    try {
+      const res = await fetch(`http://localhost:35901/node/${node.id}`)
+      if (res.ok) {
+        const text = await res.text()
+        setInsertModeText(text)
+      } else {
+        // Fallback: try reading the file directly
+        if (node.file) {
+          const fileRes = await fetch(`/api/notes/${encodeURIComponent(node.file)}`)
+          if (fileRes.ok) {
+            setInsertModeText(await fileRes.text())
+          }
+        }
+      }
+    } catch {
+      // Fallback: try reading the file directly
+      const node2 = previewNode as OrgRoamNode
+      if (node2.file) {
+        try {
+          const fileRes = await fetch(`/api/notes/${encodeURIComponent(node2.file)}`)
+          if (fileRes.ok) {
+            setInsertModeText(await fileRes.text())
+          }
+        } catch {}
+      }
+    }
+    insertModeNodeRef.current = node
+    setVimMode('insert')
+  }, [previewNode])
+
+  // Insert mode: exit with save
+  const exitInsertMode = useCallback(() => {
+    // Final save
+    if (insertModeNodeRef.current && insertModeText) {
+      const node = insertModeNodeRef.current
+      fetch('/api/save-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: node.file,
+          content: insertModeText,
+          pos: node.pos,
+          level: node.level,
+        }),
+      }).catch(() => {})
+    }
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    insertModeNodeRef.current = null
+    setVimMode('normal')
+  }, [insertModeText])
+
+  // Insert mode: auto-save with 1s debounce
+  useEffect(() => {
+    if (vimMode !== 'insert' || !insertModeNodeRef.current) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      const node = insertModeNodeRef.current
+      if (!node) return
+      fetch('/api/save-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: node.file,
+          content: insertModeText,
+          pos: node.pos,
+          level: node.level,
+        }),
+      }).catch(() => {})
+    }, 1000)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [insertModeText, vimMode])
+
   // Global vim keybindings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -667,6 +828,67 @@ export function GraphPage() {
           setVimMode('normal')
           setSearchVisible(false)
           searchInputRef.current?.blur()
+        }
+        return
+      }
+
+      // In-node search mode
+      if (vimMode === 'inNodeSearch') {
+        if (e.key === 'Escape') {
+          setVimMode('normal')
+          setInNodeSearch(false)
+          setInNodeSearchQuery('')
+          setInNodeSearchMatches([])
+          setInNodeSearchCurrentIndex(0)
+          // Clear highlights
+          if (typeof CSS !== 'undefined' && 'highlights' in CSS) {
+            ;(CSS as any).highlights.delete('in-node-search')
+            ;(CSS as any).highlights.delete('in-node-search-current')
+          }
+        } else if (e.key === 'Enter') {
+          if (e.shiftKey) {
+            // Previous match
+            if (inNodeSearchMatches.length > 0) {
+              const prevIdx = (inNodeSearchCurrentIndex - 1 + inNodeSearchMatches.length) % inNodeSearchMatches.length
+              setInNodeSearchCurrentIndex(prevIdx)
+            }
+          } else {
+            // Next match
+            if (inNodeSearchMatches.length > 0) {
+              const nextIdx = (inNodeSearchCurrentIndex + 1) % inNodeSearchMatches.length
+              setInNodeSearchCurrentIndex(nextIdx)
+            }
+          }
+        } else if (e.key === 'Backspace') {
+          setInNodeSearchQuery((q) => q.slice(0, -1))
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault()
+          setInNodeSearchQuery((q) => q + e.key)
+        }
+        return
+      }
+
+      // Insert mode — only handle Escape to exit
+      if (vimMode === 'insert') {
+        if (e.key === 'Escape') {
+          exitInsertMode()
+        }
+        return
+      }
+
+      // Visual mode
+      if (vimMode === 'visual') {
+        if (e.key === 'Escape') {
+          setVimMode('normal')
+          window.getSelection()?.removeAllRanges()
+        } else if (e.key === 'y') {
+          e.preventDefault()
+          const sel = window.getSelection()
+          if (sel && sel.toString()) {
+            navigator.clipboard.writeText(sel.toString())
+          }
+          setVimMode('normal')
+          sel?.removeAllRanges()
         }
         return
       }
@@ -699,9 +921,18 @@ export function GraphPage() {
       switch (e.key) {
         case '/':
           e.preventDefault()
-          setSearchVisible(true)
-          setVimMode('search')
-          setTimeout(() => searchInputRef.current?.focus(), 50)
+          if (isOpen) {
+            // In-node search when sidebar open
+            setInNodeSearch(true)
+            setInNodeSearchQuery('')
+            setInNodeSearchMatches([])
+            setInNodeSearchCurrentIndex(0)
+            setVimMode('inNodeSearch')
+          } else {
+            setSearchVisible(true)
+            setVimMode('search')
+            setTimeout(() => searchInputRef.current?.focus(), 50)
+          }
           break
         case 'Escape':
           if (showVimHelp) {
@@ -715,6 +946,12 @@ export function GraphPage() {
           e.preventDefault()
           setThreeDim(!threeDim)
           break
+        case 'Tab':
+          if (isOpen) {
+            e.preventDefault()
+            setCollapse((c: boolean) => !c)
+          }
+          break
         case '?':
           e.preventDefault()
           setShowVimHelp((v) => !v)
@@ -724,6 +961,32 @@ export function GraphPage() {
           setVimMode('command')
           setCommandBuffer('')
           setTimeout(() => commandInputRef.current?.focus(), 50)
+          break
+        case 'i':
+          if (isOpen) {
+            e.preventDefault()
+            enterInsertMode()
+          }
+          break
+        case 'v':
+          if (isOpen) {
+            e.preventDefault()
+            setVimMode('visual')
+          }
+          break
+        case 'n':
+          if (inNodeSearchMatches.length > 0) {
+            e.preventDefault()
+            const nextIdx = (inNodeSearchCurrentIndex + 1) % inNodeSearchMatches.length
+            setInNodeSearchCurrentIndex(nextIdx)
+          }
+          break
+        case 'N':
+          if (inNodeSearchMatches.length > 0) {
+            e.preventDefault()
+            const prevIdx = (inNodeSearchCurrentIndex - 1 + inNodeSearchMatches.length) % inNodeSearchMatches.length
+            setInNodeSearchCurrentIndex(prevIdx)
+          }
           break
         case 'j':
           if (isOpen && sidebarScrollRef.current) {
@@ -791,7 +1054,8 @@ export function GraphPage() {
   }, [
     vimMode, pendingKey, isOpen, showVimHelp, threeDim, canUndo, canRedo,
     onClose, setPreviewNode, setThreeDim, previousPreviewNode, nextPreviewNode,
-    executeVimCommand, commandBuffer, zoomToPreviewNode,
+    executeVimCommand, commandBuffer, zoomToPreviewNode, collapse,
+    inNodeSearch, inNodeSearchMatches, inNodeSearchCurrentIndex, insertModeText,
   ])
 
   const [windowWidth, windowHeight] = useWindowSize()
@@ -869,12 +1133,6 @@ export function GraphPage() {
         height="100vh"
         overflow="clip"
       >
-        <button
-          className="toggle-3d-btn"
-          onClick={() => setThreeDim(!threeDim)}
-        >
-          {threeDim ? '3D' : '2D'}
-        </button>
         <SearchBar
           graphData={graphData}
           nodeById={nodeByIdRef.current!}
@@ -884,6 +1142,7 @@ export function GraphPage() {
           visible={searchVisible}
           onHide={() => { setSearchVisible(false); setVimMode('normal') }}
           inputRef={searchInputRef}
+          aboveSidebar={isOpen}
         />
         <Box position="absolute">
           {graphData && (
@@ -930,11 +1189,6 @@ export function GraphPage() {
             onClose,
             previewNode,
             setPreviewNode,
-            canUndo,
-            canRedo,
-            previousPreviewNode,
-            nextPreviewNode,
-            resetPreviewNode,
             setSidebarHighlightedNode,
             openContextMenu,
             scope,
@@ -944,6 +1198,16 @@ export function GraphPage() {
             setTagColors,
             filter,
             setFilter,
+            collapse,
+            setCollapse,
+            isInsertMode: vimMode === 'insert',
+            insertModeText,
+            setInsertModeText,
+            isVisualMode: vimMode === 'visual',
+            inNodeSearch,
+            inNodeSearchQuery,
+            inNodeSearchMatchCount: inNodeSearchMatches.length,
+            inNodeSearchCurrentIndex,
           }}
           macros={emacsVariables.katexMacros}
           attachDir={emacsVariables.attachDir || ''}
@@ -997,6 +1261,12 @@ export function GraphPage() {
               autoFocus
             />
           </div>
+        )}
+        {vimMode === 'insert' && (
+          <div className="vim-mode-indicator">-- INSERT --</div>
+        )}
+        {vimMode === 'visual' && (
+          <div className="vim-mode-indicator">-- VISUAL --</div>
         )}
       </Box>
     </VariablesContext.Provider>
@@ -1646,7 +1916,9 @@ export const Graph = function (props: GraphProps) {
             const sprite = new SpriteText(node.title.substring(0, 40))
             sprite.fontFace = "'VT323', 'Courier New', monospace"
             sprite.color = getThemeColor(visuals.labelTextColor, theme)
-            sprite.backgroundColor = getThemeColor(visuals.labelBackgroundColor, theme)
+            sprite.backgroundColor = visuals.labelBackgroundColor
+              ? getThemeColor(visuals.labelBackgroundColor, theme)
+              : 'rgba(20, 18, 15, 0.75)'
             sprite.padding = 2
             sprite.textHeight = 8
 

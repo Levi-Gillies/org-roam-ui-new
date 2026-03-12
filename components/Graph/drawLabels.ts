@@ -102,16 +102,17 @@ export function drawLabels(props: drawLabelsProps) {
 
   // draw label background
   const textOpacity = getLabelOpacity(fadeFactor, visuals, globalScale, opacity, isHighlighty)
-  if (visuals.labelBackgroundColor && visuals.labelBackgroundOpacity) {
-    const backgroundOpacity = textOpacity * visuals.labelBackgroundOpacity
-    const labelBackground = hexToRGBA(labelBackgroundColor, backgroundOpacity)
-    ctx.fillStyle = labelBackground
-    ctx.fillRect(
-      node.x! - bckgDimensions[0] / 2,
-      node.y! - bckgDimensions[1] / 2 + nodeS,
-      ...bckgDimensions,
-    )
-  }
+  const bgOpacity = visuals.labelBackgroundOpacity || 0.75
+  const backgroundOpacity = textOpacity * bgOpacity
+  const labelBackground = (visuals.labelBackgroundColor && labelBackgroundColor)
+    ? hexToRGBA(labelBackgroundColor, backgroundOpacity)
+    : `rgba(20, 18, 15, ${backgroundOpacity})`
+  ctx.fillStyle = labelBackground
+  ctx.fillRect(
+    node.x! - bckgDimensions[0] / 2,
+    node.y! - bckgDimensions[1] / 2 + nodeS,
+    ...bckgDimensions,
+  )
 
   // draw label text
   ctx.textAlign = 'center'
