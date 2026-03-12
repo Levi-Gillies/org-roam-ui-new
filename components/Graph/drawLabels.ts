@@ -118,7 +118,7 @@ export function drawLabels(props: drawLabelsProps) {
   ctx.textBaseline = 'middle'
   const labelText = hexToRGBA(labelTextColor, textOpacity)
   ctx.fillStyle = labelText
-  ctx.font = `${fontSize}px Sans-Serif`
+  ctx.font = `${fontSize}px 'VT323', 'Courier New', monospace`
   const wordsArray = wrap(label, { width: visuals.labelWordWrap }).split('\n')
 
   const truncatedWords =

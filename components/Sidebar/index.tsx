@@ -41,6 +41,7 @@ export interface SidebarProps {
   macros?: { [key: string]: string }
   attachDir: string
   useInheritance: boolean
+  scrollRef?: (instance: any) => void
 }
 
 const Sidebar = (props: SidebarProps) => {
@@ -70,6 +71,7 @@ const Sidebar = (props: SidebarProps) => {
     macros,
     attachDir,
     useInheritance,
+    scrollRef,
   } = props
 
   const { highlightColor } = useContext(ThemeContext)
@@ -120,6 +122,7 @@ const Sidebar = (props: SidebarProps) => {
             </Flex>
           </Flex>
           <Scrollbars
+            ref={(instance: any) => { if (scrollRef) scrollRef(instance) }}
             autoHide
             style={{ flexGrow: 1 }}
             renderThumbVertical={({ style, ...props }) => (

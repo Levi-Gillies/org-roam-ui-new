@@ -2,7 +2,7 @@
 
 A graphical frontend for your [org-roam](https://github.com/org-roam/org-roam) Zettelkasten, forked from [org-roam/org-roam-ui](https://github.com/org-roam/org-roam-ui).
 
-This fork features a cleaner UI with a transparent background (for camera/OBS overlays), a centered floating note viewer, and a built-in search bar.
+This fork features a retro Apple II aesthetic with vim-style keybindings, a centered floating note viewer, and a built-in search bar.
 
 ## Installation
 
@@ -64,38 +64,56 @@ In your init file:
 
 Run `M-x org-roam-ui-mode RET` to start the web server on `http://127.0.0.1:35901/`.
 
-- **Search**: Use the search bar at the top center to find and zoom to nodes
+- **Search**: Press `/` to open the search bar, find and zoom to nodes
 - **Note preview**: Click a node or select a search result to open the floating note viewer
 - **Navigation**: Use back/forward arrows and the collapse toggle in the note viewer toolbar
+- **2D/3D toggle**: Click the button in the top-left corner or press `t`
 
-## Transparent Background / OBS Camera Overlay
+## Keybindings
 
-The graph background is transparent by default. This lets you composite the graph over a webcam or other video source using OBS (or any tool that supports browser sources).
+This fork uses vim-style keybindings for navigation:
 
-### OBS Setup
+| Key | Action |
+|-----|--------|
+| `/` | Open search bar |
+| `Escape` | Close search / sidebar / help |
+| `t` | Toggle 2D/3D |
+| `j` / `k` | Scroll sidebar down / up |
+| `h` / `l` | Previous / next preview node |
+| `g g` | Scroll to top of sidebar |
+| `G` | Scroll to bottom of sidebar |
+| `Ctrl+d` / `Ctrl+u` | Half-page scroll down / up |
+| `z z` | Center/zoom to current node |
+| `:` | Open command mode |
+| `:q` + Enter | Close sidebar |
+| `:help` + Enter | Show keybinding help |
+| `?` | Toggle keybinding help overlay |
 
-1. Start `org-roam-ui-mode` in Emacs
-2. In OBS, add a **Browser Source** pointing to `http://127.0.0.1:35901/`
-3. Set the browser source width/height to match your canvas
-4. Check **"Shutdown source when not visible"** (optional)
-5. Layer your webcam source **behind** the browser source — the graph floats over your camera
+## Retro Apple II Theme
 
-### Changing the background
-
-The background color is set in `components/config.ts` in the `initialVisuals` object:
-
-```ts
-backgroundColor: 'transparent',  // default: transparent for overlays
-// Change to any CSS color or Chakra UI color token, e.g.:
-// backgroundColor: 'gray.900',
-// backgroundColor: 'white',
-```
+The graph uses a retro Apple II inspired color scheme:
+- **Background**: Warm beige (#F5E6C8)
+- **Nodes**: Apple rainbow colors (green, yellow, orange, red, purple, blue)
+- **Links**: Muted retro green
+- **Labels**: Off-white on terminal font (VT323)
+- **Font**: VT323 monospace throughout
 
 ## Customization
 
 Visual defaults live in `components/config.ts` (the `initialVisuals` object). You can tweak node colors, link styles, label settings, and more. Settings are persisted in the browser's localStorage.
 
 Additional styles can be modified in `styles/globals.css`.
+
+### Changing the background
+
+The background color is set in `components/config.ts` in the `initialVisuals` object:
+
+```ts
+backgroundColor: '#F5E6C8',  // default: retro beige
+// Change to any CSS color or Chakra UI color token, e.g.:
+// backgroundColor: 'gray.900',
+// backgroundColor: 'transparent',  // for OBS overlays
+```
 
 ## Development
 

@@ -14,6 +14,7 @@ import { GraphData, LinkObject, NodeObject } from 'force-graph'
 import Head from 'next/head'
 import React, {
   ComponentPropsWithoutRef,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -57,6 +58,7 @@ import { nodeSize } from '../util/nodeSize'
 import { getNodeColor } from '../util/getNodeColor'
 import { isLinkRelatedToNode } from '../util/isLinkRelatedToNode'
 import { getLinkColor } from '../util/getLinkColor'
+import VimHelp from '../components/VimHelp'
 
 const d3promise = import('d3-force-3d')
 
@@ -94,14 +96,16 @@ interface SearchBarProps {
   setPreviewNode: any
   graphRef: any
   threeDim: boolean
+  visible: boolean
+  onHide: () => void
+  inputRef: React.RefObject<HTMLInputElement>
 }
 
-function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim }: SearchBarProps) {
+function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, visible, onHide, inputRef }: SearchBarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<OrgRoamNode[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [showResults, setShowResults] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -126,6 +130,7 @@ function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim }: 
     setPreviewNode(node)
     setQuery('')
     setShowResults(false)
+    onHide()
 
     // Zoom to node — x/y/z are added at runtime by force-graph
     const fg = graphRef.current
@@ -157,13 +162,15 @@ function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim }: 
       e.preventDefault()
       selectNode(results[activeIndex])
     } else if (e.key === 'Escape') {
+      setQuery('')
       setShowResults(false)
       inputRef.current?.blur()
+      onHide()
     }
   }
 
   return (
-    <div className="search-container" ref={containerRef}>
+    <div className={`search-container${visible ? '' : ' hidden'}`} ref={containerRef}>
       <input
         ref={inputRef}
         className="search-input"
@@ -246,6 +253,17 @@ export function GraphPage() {
   } = previewNodeState
   const [sidebarHighlightedNode, setSidebarHighlightedNode] = useState<OrgRoamNode | null>(null)
   const { isOpen, onOpen, onClose } = useDisclosure()
+
+  // Vim keybinding state
+  const [searchVisible, setSearchVisible] = useState(false)
+  const [showVimHelp, setShowVimHelp] = useState(false)
+  const [vimMode, setVimMode] = useState<'normal' | 'search' | 'command'>('normal')
+  const [commandBuffer, setCommandBuffer] = useState('')
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const commandInputRef = useRef<HTMLInputElement>(null)
+  const sidebarScrollRef = useRef<any>(null)
+  const pendingKeyTimerRef = useRef<any>(null)
 
   const nodeByIdRef = useRef<NodeById>({})
   const linksByNodeIdRef = useRef<LinksByNodeId>({})
@@ -594,6 +612,188 @@ export function GraphPage() {
     }, 50)
   }, [scope.nodeIds])
 
+  // Zoom to current preview node helper
+  const zoomToPreviewNode = useCallback(() => {
+    const fg = graphRef.current
+    const n = previewNode as any
+    if (!fg || n.x === undefined || n.y === undefined) return
+    if (threeDim) {
+      const distance = 200
+      const distRatio = 1 + distance / Math.hypot(n.x, n.y, n.z || 0)
+      fg.cameraPosition(
+        { x: n.x * distRatio, y: n.y * distRatio, z: (n.z || 0) * distRatio },
+        { x: n.x, y: n.y, z: n.z || 0 },
+        1000,
+      )
+    } else {
+      fg.centerAt(n.x, n.y, 1000)
+      fg.zoom(4, 1000)
+    }
+  }, [previewNode, threeDim])
+
+  // Execute vim command
+  const executeVimCommand = useCallback((cmd: string) => {
+    const trimmed = cmd.trim()
+    if (trimmed === 'q') {
+      onClose()
+      setPreviewNode({})
+    } else if (trimmed === 'help') {
+      setShowVimHelp(true)
+    }
+  }, [onClose, setPreviewNode])
+
+  // Global vim keybindings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (document.activeElement?.tagName || '').toLowerCase()
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select'
+
+      // Command mode input handling
+      if (vimMode === 'command') {
+        if (e.key === 'Escape') {
+          setVimMode('normal')
+          setCommandBuffer('')
+        } else if (e.key === 'Enter') {
+          executeVimCommand(commandBuffer)
+          setVimMode('normal')
+          setCommandBuffer('')
+        }
+        return
+      }
+
+      // Search mode — only handle Escape to exit
+      if (vimMode === 'search') {
+        if (e.key === 'Escape') {
+          setVimMode('normal')
+          setSearchVisible(false)
+          searchInputRef.current?.blur()
+        }
+        return
+      }
+
+      // Normal mode — ignore if user is in an input field
+      if (isInput) return
+
+      // Pending key sequences (gg, zz)
+      if (pendingKey === 'g') {
+        if (e.key === 'g') {
+          // gg — scroll to top
+          e.preventDefault()
+          sidebarScrollRef.current?.scrollTop(0)
+        }
+        setPendingKey(null)
+        if (pendingKeyTimerRef.current) clearTimeout(pendingKeyTimerRef.current)
+        return
+      }
+      if (pendingKey === 'z') {
+        if (e.key === 'z') {
+          // zz — center on node
+          e.preventDefault()
+          zoomToPreviewNode()
+        }
+        setPendingKey(null)
+        if (pendingKeyTimerRef.current) clearTimeout(pendingKeyTimerRef.current)
+        return
+      }
+
+      switch (e.key) {
+        case '/':
+          e.preventDefault()
+          setSearchVisible(true)
+          setVimMode('search')
+          setTimeout(() => searchInputRef.current?.focus(), 50)
+          break
+        case 'Escape':
+          if (showVimHelp) {
+            setShowVimHelp(false)
+          } else if (isOpen) {
+            onClose()
+            setPreviewNode({})
+          }
+          break
+        case 't':
+          e.preventDefault()
+          setThreeDim(!threeDim)
+          break
+        case '?':
+          e.preventDefault()
+          setShowVimHelp((v) => !v)
+          break
+        case ':':
+          e.preventDefault()
+          setVimMode('command')
+          setCommandBuffer('')
+          setTimeout(() => commandInputRef.current?.focus(), 50)
+          break
+        case 'j':
+          if (isOpen && sidebarScrollRef.current) {
+            e.preventDefault()
+            const current = sidebarScrollRef.current.getScrollTop()
+            sidebarScrollRef.current.scrollTop(current + 60)
+          }
+          break
+        case 'k':
+          if (isOpen && sidebarScrollRef.current) {
+            e.preventDefault()
+            const current = sidebarScrollRef.current.getScrollTop()
+            sidebarScrollRef.current.scrollTop(current - 60)
+          }
+          break
+        case 'h':
+          if (isOpen && canUndo) {
+            e.preventDefault()
+            previousPreviewNode()
+          }
+          break
+        case 'l':
+          if (isOpen && canRedo) {
+            e.preventDefault()
+            nextPreviewNode()
+          }
+          break
+        case 'g':
+          e.preventDefault()
+          setPendingKey('g')
+          pendingKeyTimerRef.current = setTimeout(() => setPendingKey(null), 500)
+          break
+        case 'G':
+          if (isOpen && sidebarScrollRef.current) {
+            e.preventDefault()
+            sidebarScrollRef.current.scrollToBottom()
+          }
+          break
+        case 'd':
+          if (e.ctrlKey && isOpen && sidebarScrollRef.current) {
+            e.preventDefault()
+            const current = sidebarScrollRef.current.getScrollTop()
+            const height = sidebarScrollRef.current.getClientHeight()
+            sidebarScrollRef.current.scrollTop(current + height / 2)
+          }
+          break
+        case 'u':
+          if (e.ctrlKey && isOpen && sidebarScrollRef.current) {
+            e.preventDefault()
+            const current = sidebarScrollRef.current.getScrollTop()
+            const height = sidebarScrollRef.current.getClientHeight()
+            sidebarScrollRef.current.scrollTop(current - height / 2)
+          }
+          break
+        case 'z':
+          e.preventDefault()
+          setPendingKey('z')
+          pendingKeyTimerRef.current = setTimeout(() => setPendingKey(null), 500)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    vimMode, pendingKey, isOpen, showVimHelp, threeDim, canUndo, canRedo,
+    onClose, setPreviewNode, setThreeDim, previousPreviewNode, nextPreviewNode,
+    executeVimCommand, commandBuffer, zoomToPreviewNode,
+  ])
+
   const [windowWidth, windowHeight] = useWindowSize()
 
   const contextMenuRef = useRef<any>()
@@ -669,12 +869,21 @@ export function GraphPage() {
         height="100vh"
         overflow="clip"
       >
+        <button
+          className="toggle-3d-btn"
+          onClick={() => setThreeDim(!threeDim)}
+        >
+          {threeDim ? '3D' : '2D'}
+        </button>
         <SearchBar
           graphData={graphData}
           nodeById={nodeByIdRef.current!}
           setPreviewNode={setPreviewNode}
           graphRef={graphRef}
           threeDim={threeDim}
+          visible={searchVisible}
+          onHide={() => { setSearchVisible(false); setVimMode('normal') }}
+          inputRef={searchInputRef}
         />
         <Box position="absolute">
           {graphData && (
@@ -742,6 +951,7 @@ export function GraphPage() {
           nodeById={nodeByIdRef.current!}
           linksByNodeId={linksByNodeIdRef.current!}
           nodeByCite={nodeByCiteRef.current!}
+          scrollRef={(instance: any) => { sidebarScrollRef.current = instance }}
         />
         {contextMenu.isOpen && (
           <div ref={contextMenuRef}>
@@ -759,6 +969,32 @@ export function GraphPage() {
               filter={filter}
               setTagColors={setTagColors}
               tagColors={tagColors}
+            />
+          </div>
+        )}
+        {showVimHelp && (
+          <VimHelp onClose={() => setShowVimHelp(false)} />
+        )}
+        {vimMode === 'command' && (
+          <div className="vim-command-line">
+            <span style={{ color: '#F0EBE0', marginRight: 4 }}>:</span>
+            <input
+              ref={commandInputRef}
+              className="vim-command-input"
+              type="text"
+              value={commandBuffer}
+              onChange={(e) => setCommandBuffer(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setVimMode('normal')
+                  setCommandBuffer('')
+                } else if (e.key === 'Enter') {
+                  executeVimCommand(commandBuffer)
+                  setVimMode('normal')
+                  setCommandBuffer('')
+                }
+              }}
+              autoFocus
             />
           </div>
         )}
@@ -1408,6 +1644,7 @@ export const Graph = function (props: GraphProps) {
               return
             }
             const sprite = new SpriteText(node.title.substring(0, 40))
+            sprite.fontFace = "'VT323', 'Courier New', monospace"
             sprite.color = getThemeColor(visuals.labelTextColor, theme)
             sprite.backgroundColor = getThemeColor(visuals.labelBackgroundColor, theme)
             sprite.padding = 2
