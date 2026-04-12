@@ -1,16 +1,15 @@
 import {
+  Button,
   Box,
   Flex,
-  IconButton,
-  Tooltip,
   useDisclosure,
   useOutsideClick,
   useTheme,
 } from '@chakra-ui/react'
 import { useAnimation } from '@lilib/hooks'
-import { useWindowSize, useWindowWidth } from '@react-hook/window-size'
+import { useWindowSize } from '@react-hook/window-size'
 import * as d3int from 'd3-interpolate'
-import { GraphData, LinkObject, NodeObject } from 'force-graph'
+import { GraphData, NodeObject } from 'force-graph'
 import Head from 'next/head'
 import React, {
   ComponentPropsWithoutRef,
@@ -201,6 +200,39 @@ function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, vi
   )
 }
 
+const extractNodeTextFromFile = (fileContent: string, node: OrgRoamNode) => {
+  if (!node.level) {
+    return fileContent
+  }
+
+  const lines = fileContent.split('\n')
+  let charCount = 0
+  let headingLineIdx = -1
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (charCount >= node.pos) {
+      headingLineIdx = index
+      break
+    }
+    charCount += lines[index].length + 1
+  }
+
+  if (headingLineIdx === -1) {
+    return fileContent
+  }
+
+  let endLineIdx = lines.length
+  for (let index = headingLineIdx + 1; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(\*+)\s/)
+    if (match && match[1].length <= node.level) {
+      endLineIdx = index
+      break
+    }
+  }
+
+  return lines.slice(headingLineIdx, endLineIdx).join('\n')
+}
+
 export default function Home() {
   // only render on the client
   const [showPage, setShowPage] = useState(false)
@@ -240,46 +272,43 @@ export function GraphPage() {
     previewNodeState,
     {
       set: setPreviewNode,
-      reset: resetPreviewNode,
       undo: previousPreviewNode,
       redo: nextPreviewNode,
       canUndo,
       canRedo,
     },
   ] = useUndo<NodeObject>({})
-  const {
-    past: pastPreviewNodes,
-    present: previewNode,
-    future: futurePreviewNodes,
-  } = previewNodeState
+  const { present: previewNode } = previewNodeState
   const [sidebarHighlightedNode, setSidebarHighlightedNode] = useState<OrgRoamNode | null>(null)
   const { isOpen, onOpen, onClose } = useDisclosure()
 
-  // Vim keybinding state
+  // Keyboard and touch control state
+  const [touchControlsVisible, setTouchControlsVisible] = useState(false)
   const [searchVisible, setSearchVisible] = useState(false)
   const [showVimHelp, setShowVimHelp] = useState(false)
-  const [vimMode, setVimMode] = useState<'normal' | 'search' | 'command' | 'insert' | 'visual' | 'inNodeSearch'>('normal')
-  const [commandBuffer, setCommandBuffer] = useState('')
+  const [vimMode, setVimMode] = useState<'normal' | 'search' | 'inNodeSearch'>('normal')
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const commandInputRef = useRef<HTMLInputElement>(null)
   const sidebarScrollRef = useRef<any>(null)
   const pendingKeyTimerRef = useRef<any>(null)
 
   // Collapse state (lifted from Sidebar for Tab keybinding)
   const [collapse, setCollapse] = useState(false)
 
-  // Insert mode state
-  const [insertModeText, setInsertModeText] = useState('')
-  const insertModeNodeRef = useRef<OrgRoamNode | null>(null)
-  const saveTimerRef = useRef<any>(null)
+  // Dedicated node editor state
+  const [isEditorMode, setIsEditorMode] = useState(false)
+  const [editorText, setEditorText] = useState('')
+  const [editorSavedText, setEditorSavedText] = useState('')
+  const [editorStatusMessage, setEditorStatusMessage] = useState('')
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
+  const [isEditorSaving, setIsEditorSaving] = useState(false)
+  const editorNodeRef = useRef<OrgRoamNode | null>(null)
 
   // In-node search state
   const [inNodeSearch, setInNodeSearch] = useState(false)
   const [inNodeSearchQuery, setInNodeSearchQuery] = useState('')
   const [inNodeSearchMatches, setInNodeSearchMatches] = useState<Range[]>([])
   const [inNodeSearchCurrentIndex, setInNodeSearchCurrentIndex] = useState(0)
-  const inNodeSearchInputRef = useRef<HTMLInputElement>(null)
 
   const nodeByIdRef = useRef<NodeById>({})
   const linksByNodeIdRef = useRef<LinksByNodeId>({})
@@ -290,6 +319,31 @@ export function GraphPage() {
   const clusterRef = useRef<{ [id: string]: number }>({})
 
   const currentGraphDataRef = useRef<GraphData>({ nodes: [], links: [] })
+  const editorDirty = isEditorMode && editorText !== editorSavedText
+
+  const clearInNodeSearch = useCallback(() => {
+    setInNodeSearch(false)
+    setInNodeSearchQuery('')
+    setInNodeSearchMatches([])
+    setInNodeSearchCurrentIndex(0)
+    if (typeof CSS !== 'undefined' && 'highlights' in CSS) {
+      ;(CSS as any).highlights.delete('in-node-search')
+      ;(CSS as any).highlights.delete('in-node-search-current')
+    }
+  }, [])
+
+  const closePreview = useCallback(() => {
+    setIsEditorMode(false)
+    setEditorText('')
+    setEditorSavedText('')
+    setEditorStatusMessage('')
+    editorNodeRef.current = null
+    clearInNodeSearch()
+    setSearchVisible(false)
+    setVimMode('normal')
+    onClose()
+    setPreviewNode({})
+  }, [clearInNodeSearch, onClose, setPreviewNode])
 
   const updateGraphData = (orgRoamGraphData: OrgRoamGraphReponse) => {
     const oldNodeById = nodeByIdRef.current
@@ -485,6 +539,20 @@ export function GraphPage() {
     currentGraphDataRef.current = graphData
   }, [graphData])
 
+  useEffect(() => {
+    const currentPreviewId = (previewNode as OrgRoamNode)?.id
+    if (!currentPreviewId) {
+      return
+    }
+    if (isEditorMode && editorNodeRef.current?.id !== currentPreviewId) {
+      setIsEditorMode(false)
+      setEditorText('')
+      setEditorSavedText('')
+      setEditorStatusMessage('')
+      editorNodeRef.current = null
+    }
+  }, [isEditorMode, previewNode])
+
   const { setEmacsTheme } = useContext(ThemeContext)
 
   const scopeRef = useRef<Scope>({ nodeIds: [], excludedNodeIds: [] })
@@ -647,16 +715,113 @@ export function GraphPage() {
     }
   }, [previewNode, threeDim])
 
-  // Execute vim command
-  const executeVimCommand = useCallback((cmd: string) => {
-    const trimmed = cmd.trim()
-    if (trimmed === 'q') {
-      onClose()
-      setPreviewNode({})
-    } else if (trimmed === 'help') {
-      setShowVimHelp(true)
+  const fetchNodeText = useCallback(async (node: OrgRoamNode) => {
+    const encodedId = encodeURIComponent(encodeURIComponent(node.id))
+
+    try {
+      const res = await fetch(`http://localhost:35901/node/${encodedId}`)
+      if (res.ok) {
+        const text = await res.text()
+        if (text !== 'error') {
+          return text
+        }
+      }
+    } catch {}
+
+    if (!node.file) {
+      return ''
     }
-  }, [onClose, setPreviewNode])
+
+    try {
+      const fileRes = await fetch(`/api/notes/${encodeURIComponent(node.file)}`)
+      if (fileRes.ok) {
+        const fileText = await fileRes.text()
+        return extractNodeTextFromFile(fileText, node)
+      }
+    } catch {}
+
+    return ''
+  }, [])
+
+  const openVimEditor = useCallback(async () => {
+    const node = previewNode as OrgRoamNode
+    if (!node?.id) {
+      return
+    }
+
+    const text = await fetchNodeText(node)
+    editorNodeRef.current = node
+    setEditorText(text)
+    setEditorSavedText(text)
+    setEditorStatusMessage('Vim editor ready. Use :w to save or :wq to save and return.')
+    clearInNodeSearch()
+    setVimMode('normal')
+    setIsEditorMode(true)
+  }, [clearInNodeSearch, fetchNodeText, previewNode])
+
+  const saveEditor = useCallback(async () => {
+    const node = editorNodeRef.current
+    if (!node) {
+      return false
+    }
+
+    setIsEditorSaving(true)
+    setEditorStatusMessage('Saving...')
+
+    try {
+      const res = await fetch('/api/save-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: node.file,
+          content: editorText,
+          pos: node.pos,
+          level: node.level,
+        }),
+      })
+
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(body || 'Save failed')
+      }
+
+      setEditorSavedText(editorText)
+      setPreviewRefreshToken((value) => value + 1)
+      setEditorStatusMessage('Saved')
+      return true
+    } catch (error: any) {
+      setEditorStatusMessage(error?.message || 'Save failed')
+      return false
+    } finally {
+      setIsEditorSaving(false)
+    }
+  }, [editorText])
+
+  const quitEditor = useCallback(async (force = false) => {
+    if (editorDirty && !force) {
+      setEditorStatusMessage('Unsaved changes. Use :wq to save or :q! to discard.')
+      return false
+    }
+
+    setIsEditorMode(false)
+    setEditorStatusMessage('')
+    clearInNodeSearch()
+    setVimMode('normal')
+    return true
+  }, [clearInNodeSearch, editorDirty])
+
+  const writeQuitEditor = useCallback(async () => {
+    const saved = await saveEditor()
+    if (!saved) {
+      return false
+    }
+
+    setIsEditorMode(false)
+    setEditorStatusMessage('')
+    clearInNodeSearch()
+    setVimMode('normal')
+    return true
+  }, [clearInNodeSearch, saveEditor])
 
   // In-node search: find and highlight matches when query changes
   useEffect(() => {
@@ -722,111 +887,23 @@ export function GraphPage() {
     }
   }, [inNodeSearchMatches, inNodeSearchCurrentIndex])
 
-  // Insert mode: enter
-  const enterInsertMode = useCallback(async () => {
-    const node = previewNode as OrgRoamNode
-    if (!node?.id) return
-    try {
-      const res = await fetch(`http://localhost:35901/node/${node.id}`)
-      if (res.ok) {
-        const text = await res.text()
-        setInsertModeText(text)
-      } else {
-        // Fallback: try reading the file directly
-        if (node.file) {
-          const fileRes = await fetch(`/api/notes/${encodeURIComponent(node.file)}`)
-          if (fileRes.ok) {
-            setInsertModeText(await fileRes.text())
-          }
-        }
-      }
-    } catch {
-      // Fallback: try reading the file directly
-      const node2 = previewNode as OrgRoamNode
-      if (node2.file) {
-        try {
-          const fileRes = await fetch(`/api/notes/${encodeURIComponent(node2.file)}`)
-          if (fileRes.ok) {
-            setInsertModeText(await fileRes.text())
-          }
-        } catch {}
-      }
-    }
-    insertModeNodeRef.current = node
-    setVimMode('insert')
-  }, [previewNode])
-
-  // Insert mode: exit with save
-  const exitInsertMode = useCallback(() => {
-    // Final save
-    if (insertModeNodeRef.current && insertModeText) {
-      const node = insertModeNodeRef.current
-      fetch('/api/save-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: node.file,
-          content: insertModeText,
-          pos: node.pos,
-          level: node.level,
-        }),
-      }).catch(() => {})
-    }
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-    insertModeNodeRef.current = null
-    setVimMode('normal')
-  }, [insertModeText])
-
-  // Insert mode: auto-save with 1s debounce
-  useEffect(() => {
-    if (vimMode !== 'insert' || !insertModeNodeRef.current) return
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      const node = insertModeNodeRef.current
-      if (!node) return
-      fetch('/api/save-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: node.file,
-          content: insertModeText,
-          pos: node.pos,
-          level: node.level,
-        }),
-      }).catch(() => {})
-    }, 1000)
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [insertModeText, vimMode])
-
   // Global vim keybindings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (document.activeElement?.tagName || '').toLowerCase()
-      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select'
-
-      // Command mode input handling
-      if (vimMode === 'command') {
-        if (e.key === 'Escape') {
-          setVimMode('normal')
-          setCommandBuffer('')
-        } else if (e.key === 'Enter') {
-          executeVimCommand(commandBuffer)
-          setVimMode('normal')
-          setCommandBuffer('')
-        }
+      if (isEditorMode) {
         return
       }
+
+      const tag = (document.activeElement?.tagName || '').toLowerCase()
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select'
 
       // Search mode — only handle Escape to exit
       if (vimMode === 'search') {
         if (e.key === 'Escape') {
           setVimMode('normal')
-          setSearchVisible(false)
+          if (!touchControlsVisible) {
+            setSearchVisible(false)
+          }
           searchInputRef.current?.blur()
         }
         return
@@ -836,24 +913,16 @@ export function GraphPage() {
       if (vimMode === 'inNodeSearch') {
         if (e.key === 'Escape') {
           setVimMode('normal')
-          setInNodeSearch(false)
-          setInNodeSearchQuery('')
-          setInNodeSearchMatches([])
-          setInNodeSearchCurrentIndex(0)
-          // Clear highlights
-          if (typeof CSS !== 'undefined' && 'highlights' in CSS) {
-            ;(CSS as any).highlights.delete('in-node-search')
-            ;(CSS as any).highlights.delete('in-node-search-current')
-          }
+          clearInNodeSearch()
         } else if (e.key === 'Enter') {
           if (e.shiftKey) {
-            // Previous match
             if (inNodeSearchMatches.length > 0) {
-              const prevIdx = (inNodeSearchCurrentIndex - 1 + inNodeSearchMatches.length) % inNodeSearchMatches.length
+              const prevIdx =
+                (inNodeSearchCurrentIndex - 1 + inNodeSearchMatches.length) %
+                inNodeSearchMatches.length
               setInNodeSearchCurrentIndex(prevIdx)
             }
           } else {
-            // Next match
             if (inNodeSearchMatches.length > 0) {
               const nextIdx = (inNodeSearchCurrentIndex + 1) % inNodeSearchMatches.length
               setInNodeSearchCurrentIndex(nextIdx)
@@ -868,38 +937,14 @@ export function GraphPage() {
         return
       }
 
-      // Insert mode — only handle Escape to exit
-      if (vimMode === 'insert') {
-        if (e.key === 'Escape') {
-          exitInsertMode()
-        }
-        return
-      }
-
-      // Visual mode
-      if (vimMode === 'visual') {
-        if (e.key === 'Escape') {
-          setVimMode('normal')
-          window.getSelection()?.removeAllRanges()
-        } else if (e.key === 'y') {
-          e.preventDefault()
-          const sel = window.getSelection()
-          if (sel && sel.toString()) {
-            navigator.clipboard.writeText(sel.toString())
-          }
-          setVimMode('normal')
-          sel?.removeAllRanges()
-        }
-        return
-      }
-
       // Normal mode — ignore if user is in an input field
-      if (isInput) return
+      if (isInput) {
+        return
+      }
 
       // Pending key sequences (gg, zz)
       if (pendingKey === 'g') {
         if (e.key === 'g') {
-          // gg — scroll to top
           e.preventDefault()
           sidebarScrollRef.current?.scrollTop(0)
         }
@@ -909,7 +954,6 @@ export function GraphPage() {
       }
       if (pendingKey === 'z') {
         if (e.key === 'z') {
-          // zz — center on node
           e.preventDefault()
           zoomToPreviewNode()
         }
@@ -922,7 +966,6 @@ export function GraphPage() {
         case '/':
           e.preventDefault()
           if (isOpen) {
-            // In-node search when sidebar open
             setInNodeSearch(true)
             setInNodeSearchQuery('')
             setInNodeSearchMatches([])
@@ -938,13 +981,12 @@ export function GraphPage() {
           if (showVimHelp) {
             setShowVimHelp(false)
           } else if (isOpen) {
-            onClose()
-            setPreviewNode({})
+            closePreview()
           }
           break
         case 't':
           e.preventDefault()
-          setThreeDim(!threeDim)
+          setThreeDim((value) => !value)
           break
         case 'Tab':
           if (isOpen) {
@@ -956,22 +998,10 @@ export function GraphPage() {
           e.preventDefault()
           setShowVimHelp((v) => !v)
           break
-        case ':':
-          e.preventDefault()
-          setVimMode('command')
-          setCommandBuffer('')
-          setTimeout(() => commandInputRef.current?.focus(), 50)
-          break
-        case 'i':
+        case 'e':
           if (isOpen) {
             e.preventDefault()
-            enterInsertMode()
-          }
-          break
-        case 'v':
-          if (isOpen) {
-            e.preventDefault()
-            setVimMode('visual')
+            void openVimEditor()
           }
           break
         case 'n':
@@ -1052,10 +1082,23 @@ export function GraphPage() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [
-    vimMode, pendingKey, isOpen, showVimHelp, threeDim, canUndo, canRedo,
-    onClose, setPreviewNode, setThreeDim, previousPreviewNode, nextPreviewNode,
-    executeVimCommand, commandBuffer, zoomToPreviewNode, collapse,
-    inNodeSearch, inNodeSearchMatches, inNodeSearchCurrentIndex, insertModeText,
+    canRedo,
+    canUndo,
+    clearInNodeSearch,
+    closePreview,
+    inNodeSearchCurrentIndex,
+    inNodeSearchMatches,
+    isEditorMode,
+    isOpen,
+    nextPreviewNode,
+    openVimEditor,
+    pendingKey,
+    previousPreviewNode,
+    setThreeDim,
+    showVimHelp,
+    touchControlsVisible,
+    vimMode,
+    zoomToPreviewNode,
   ])
 
   const [windowWidth, windowHeight] = useWindowSize()
@@ -1123,6 +1166,40 @@ export function GraphPage() {
     'mainWindowWidth',
     windowWidth,
   )
+  const touchSearchVisible = touchControlsVisible || searchVisible
+
+  const focusGraphSearch = useCallback(() => {
+    setSearchVisible(true)
+    setVimMode('search')
+    setTimeout(() => searchInputRef.current?.focus(), 50)
+  }, [])
+
+  const startInNodeSearch = useCallback(() => {
+    setInNodeSearch(true)
+    setInNodeSearchQuery('')
+    setInNodeSearchMatches([])
+    setInNodeSearchCurrentIndex(0)
+    setVimMode('inNodeSearch')
+  }, [])
+
+  const scrollSidebarBy = useCallback((delta: number) => {
+    if (!sidebarScrollRef.current) {
+      return
+    }
+    const current = sidebarScrollRef.current.getScrollTop()
+    sidebarScrollRef.current.scrollTop(current + delta)
+  }, [])
+
+  const scrollSidebarToEdge = useCallback((direction: 'top' | 'bottom') => {
+    if (!sidebarScrollRef.current) {
+      return
+    }
+    if (direction === 'top') {
+      sidebarScrollRef.current.scrollTop(0)
+      return
+    }
+    sidebarScrollRef.current.scrollToBottom()
+  }, [])
 
   return (
     <VariablesContext.Provider value={{ ...emacsVariables }}>
@@ -1139,11 +1216,90 @@ export function GraphPage() {
           setPreviewNode={setPreviewNode}
           graphRef={graphRef}
           threeDim={threeDim}
-          visible={searchVisible}
-          onHide={() => { setSearchVisible(false); setVimMode('normal') }}
+          visible={touchSearchVisible}
+          onHide={() => {
+            if (!touchControlsVisible) {
+              setSearchVisible(false)
+            }
+            setVimMode('normal')
+          }}
           inputRef={searchInputRef}
           aboveSidebar={isOpen}
         />
+        {touchControlsVisible && (
+          <>
+            <Box className="touch-controls-top-left">
+              <Button size="sm" onClick={() => setThreeDim((value) => !value)}>
+                {threeDim ? '2D' : '3D'}
+              </Button>
+            </Box>
+            <Box className="touch-controls-panel">
+              <Flex className="touch-controls-group" gap={2} wrap="wrap" justify="flex-end">
+                <Button size="sm" onClick={focusGraphSearch}>
+                  Search
+                </Button>
+                <Button size="sm" onClick={() => setShowVimHelp((value) => !value)}>
+                  Help
+                </Button>
+                {!isEditorMode && isOpen && (
+                  <>
+                    <Button size="sm" onClick={startInNodeSearch}>
+                      Find
+                    </Button>
+                    <Button size="sm" onClick={() => void openVimEditor()}>
+                      Vim
+                    </Button>
+                    <Button size="sm" onClick={closePreview}>
+                      Close
+                    </Button>
+                    <Button size="sm" onClick={() => previousPreviewNode()} isDisabled={!canUndo}>
+                      Prev
+                    </Button>
+                    <Button size="sm" onClick={() => nextPreviewNode()} isDisabled={!canRedo}>
+                      Next
+                    </Button>
+                    <Button size="sm" onClick={() => setCollapse((value) => !value)}>
+                      {collapse ? 'Expand' : 'Collapse'}
+                    </Button>
+                    <Button size="sm" onClick={() => scrollSidebarBy(-180)}>
+                      Up
+                    </Button>
+                    <Button size="sm" onClick={() => scrollSidebarBy(180)}>
+                      Down
+                    </Button>
+                    <Button size="sm" onClick={() => scrollSidebarToEdge('top')}>
+                      Top
+                    </Button>
+                    <Button size="sm" onClick={() => scrollSidebarToEdge('bottom')}>
+                      Bottom
+                    </Button>
+                  </>
+                )}
+                {isEditorMode && (
+                  <>
+                    <Button size="sm" onClick={() => void saveEditor()} isLoading={isEditorSaving}>
+                      Save
+                    </Button>
+                    <Button size="sm" onClick={() => void writeQuitEditor()} isLoading={isEditorSaving}>
+                      WQ
+                    </Button>
+                    <Button size="sm" onClick={() => void quitEditor()} isDisabled={isEditorSaving}>
+                      View
+                    </Button>
+                    <Button size="sm" onClick={() => void quitEditor(true)} isDisabled={isEditorSaving}>
+                      Discard
+                    </Button>
+                  </>
+                )}
+              </Flex>
+            </Box>
+          </>
+        )}
+        <Box className="touch-controls-toggle">
+          <Button size="sm" onClick={() => setTouchControlsVisible((value) => !value)}>
+            {touchControlsVisible ? 'Hide UI' : 'Show UI'}
+          </Button>
+        </Box>
         <Box position="absolute">
           {graphData && (
             <Graph
@@ -1186,7 +1342,7 @@ export function GraphPage() {
           {...{
             isOpen,
             onOpen,
-            onClose,
+            onClose: closePreview,
             previewNode,
             setPreviewNode,
             setSidebarHighlightedNode,
@@ -1200,10 +1356,15 @@ export function GraphPage() {
             setFilter,
             collapse,
             setCollapse,
-            isInsertMode: vimMode === 'insert',
-            insertModeText,
-            setInsertModeText,
-            isVisualMode: vimMode === 'visual',
+            isEditorMode,
+            editorText,
+            setEditorText,
+            onSaveEditor: saveEditor,
+            onWriteQuitEditor: writeQuitEditor,
+            onQuitEditor: quitEditor,
+            editorDirty,
+            editorStatusMessage,
+            previewRefreshToken,
             inNodeSearch,
             inNodeSearchQuery,
             inNodeSearchMatchCount: inNodeSearchMatches.length,
@@ -1238,35 +1399,6 @@ export function GraphPage() {
         )}
         {showVimHelp && (
           <VimHelp onClose={() => setShowVimHelp(false)} />
-        )}
-        {vimMode === 'command' && (
-          <div className="vim-command-line">
-            <span style={{ color: '#F0EBE0', marginRight: 4 }}>:</span>
-            <input
-              ref={commandInputRef}
-              className="vim-command-input"
-              type="text"
-              value={commandBuffer}
-              onChange={(e) => setCommandBuffer(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  setVimMode('normal')
-                  setCommandBuffer('')
-                } else if (e.key === 'Enter') {
-                  executeVimCommand(commandBuffer)
-                  setVimMode('normal')
-                  setCommandBuffer('')
-                }
-              }}
-              autoFocus
-            />
-          </div>
-        )}
-        {vimMode === 'insert' && (
-          <div className="vim-mode-indicator">-- INSERT --</div>
-        )}
-        {vimMode === 'visual' && (
-          <div className="vim-mode-indicator">-- VISUAL --</div>
         )}
       </Box>
     </VariablesContext.Provider>
@@ -1915,12 +2047,15 @@ export const Graph = function (props: GraphProps) {
             }
             const sprite = new SpriteText(node.title.substring(0, 40))
             sprite.fontFace = "'VT323', 'Courier New', monospace"
-            sprite.color = getThemeColor(visuals.labelTextColor, theme)
-            sprite.backgroundColor = visuals.labelBackgroundColor
-              ? getThemeColor(visuals.labelBackgroundColor, theme)
-              : 'rgba(20, 18, 15, 0.75)'
-            sprite.padding = 2
+            sprite.color = 'black'
+            sprite.backgroundColor = 'rgba(0, 0, 0, 0)'
+            sprite.padding = 0
             sprite.textHeight = 8
+            ;(sprite as any).position.set(0, -14, 0)
+
+            if ((sprite as any).material) {
+              ;(sprite as any).material.depthWrite = false
+            }
 
             return sprite
           }}

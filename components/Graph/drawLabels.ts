@@ -94,25 +94,23 @@ export function drawLabels(props: drawLabelsProps) {
   //    : (visuals.labelFontSize * nodeS) / 3
 
   //  * nodeS) / 3
-  const textWidth = ctx.measureText(label).width
-  const bckgDimensions = [textWidth * 1.1, fontSize].map((n) => n + fontSize * 0.5) as [
-    number,
-    number,
-  ] // some padding
-
-  // draw label background
   const textOpacity = getLabelOpacity(fadeFactor, visuals, globalScale, opacity, isHighlighty)
-  const bgOpacity = visuals.labelBackgroundOpacity || 0.75
-  const backgroundOpacity = textOpacity * bgOpacity
-  const labelBackground = (visuals.labelBackgroundColor && labelBackgroundColor)
-    ? hexToRGBA(labelBackgroundColor, backgroundOpacity)
-    : `rgba(20, 18, 15, ${backgroundOpacity})`
-  ctx.fillStyle = labelBackground
-  ctx.fillRect(
-    node.x! - bckgDimensions[0] / 2,
-    node.y! - bckgDimensions[1] / 2 + nodeS,
-    ...bckgDimensions,
-  )
+  if (visuals.labelBackgroundColor) {
+    const textWidth = ctx.measureText(label).width
+    const bckgDimensions = [textWidth * 1.1, fontSize].map((n) => n + fontSize * 0.5) as [
+      number,
+      number,
+    ]
+    const bgOpacity = visuals.labelBackgroundOpacity || 0.75
+    const backgroundOpacity = textOpacity * bgOpacity
+    const labelBackground = hexToRGBA(labelBackgroundColor, backgroundOpacity)
+    ctx.fillStyle = labelBackground
+    ctx.fillRect(
+      node.x! - bckgDimensions[0] / 2,
+      node.y! - bckgDimensions[1] / 2 + nodeS,
+      ...bckgDimensions,
+    )
+  }
 
   // draw label text
   ctx.textAlign = 'center'

@@ -23,6 +23,7 @@ export interface NoteProps {
   macros?: { [key: string]: string }
   attachDir: string
   useInheritance: boolean
+  previewRefreshToken?: number
 }
 
 export const Note = (props: NoteProps) => {
@@ -41,6 +42,7 @@ export const Note = (props: NoteProps) => {
     macros,
     attachDir,
     useInheritance,
+    previewRefreshToken,
   } = props
 
   const extraStyle = outline ? outlineNoteStyle : viewerNoteStyle
@@ -77,6 +79,7 @@ export const Note = (props: NoteProps) => {
               macros,
               attachDir,
               useInheritance,
+              previewRefreshToken,
             }}
           />
           <Backlinks

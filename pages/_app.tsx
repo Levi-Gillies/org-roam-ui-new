@@ -1,4 +1,6 @@
 import '../styles/globals.css'
+import 'codemirror/addon/dialog/dialog.css'
+import 'codemirror/lib/codemirror.css'
 import type { AppProps } from 'next/app'
 import { ChakraProvider, extendTheme, withDefaultColorScheme } from '@chakra-ui/react'
 import { useEffect, useState, useMemo, useContext, useReducer } from 'react'

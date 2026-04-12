@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 
 import { TagBar } from './TagBar'
 import { Note } from './Note'
@@ -7,12 +8,13 @@ import { Title } from './Title'
 import { VStack, Flex, Box } from '@chakra-ui/react'
 import { Scrollbars } from 'react-custom-scrollbars-2'
 
-import { GraphData, NodeObject, LinkObject } from 'force-graph'
+import { NodeObject } from 'force-graph'
 import { OrgRoamNode } from '../../api'
-import { ThemeContext } from '../../util/themecontext'
 import { LinksByNodeId, NodeByCite, NodeById, Scope } from '../../pages/index'
 import { usePersistantState } from '../../util/persistant-state'
 import { initialFilter, TagColors } from '../config'
+
+const VimNodeEditor = dynamic(() => import('./VimNodeEditor'), { ssr: false })
 
 export interface SidebarProps {
   isOpen: boolean
@@ -38,10 +40,15 @@ export interface SidebarProps {
   collapse: boolean
   setCollapse: (fn: (c: boolean) => boolean) => void
   scrollRef?: (instance: any) => void
-  isInsertMode?: boolean
-  insertModeText?: string
-  setInsertModeText?: (text: string) => void
-  isVisualMode?: boolean
+  isEditorMode?: boolean
+  editorText?: string
+  setEditorText?: (text: string) => void
+  onSaveEditor?: () => Promise<boolean>
+  onWriteQuitEditor?: () => Promise<boolean>
+  onQuitEditor?: (force?: boolean) => Promise<boolean>
+  editorDirty?: boolean
+  editorStatusMessage?: string
+  previewRefreshToken?: number
   inNodeSearch?: boolean
   inNodeSearchQuery?: string
   inNodeSearchMatchCount?: number
@@ -73,17 +80,21 @@ const Sidebar = (props: SidebarProps) => {
     collapse,
     setCollapse,
     scrollRef,
-    isInsertMode,
-    insertModeText,
-    setInsertModeText,
-    isVisualMode,
+    isEditorMode,
+    editorText,
+    setEditorText,
+    onSaveEditor,
+    onWriteQuitEditor,
+    onQuitEditor,
+    editorDirty,
+    editorStatusMessage,
+    previewRefreshToken,
     inNodeSearch,
     inNodeSearchQuery,
     inNodeSearchMatchCount,
     inNodeSearchCurrentIndex,
   } = props
 
-  const { highlightColor } = useContext(ThemeContext)
   const [previewRoamNode, setPreviewRoamNode] = useState<OrgRoamNode | undefined>()
 
   useEffect(() => {
@@ -108,14 +119,18 @@ const Sidebar = (props: SidebarProps) => {
   return (
     <>
       <div className="floating-sidebar-backdrop" onClick={onClose} />
-      <div className={`floating-sidebar${isVisualMode ? ' visual-mode' : ''}`}>
+      <div className="floating-sidebar">
         <Flex flexDir="column" h="100%" pl={2} width="100%">
-          {isInsertMode ? (
-            <textarea
-              className="insert-mode-textarea"
-              value={insertModeText || ''}
-              onChange={(e) => setInsertModeText?.(e.target.value)}
-              autoFocus
+          {isEditorMode ? (
+            <VimNodeEditor
+              value={editorText || ''}
+              nodeTitle={previewRoamNode?.title || 'Node'}
+              dirty={Boolean(editorDirty)}
+              statusMessage={editorStatusMessage || ''}
+              onChange={(nextText) => setEditorText?.(nextText)}
+              onSave={onSaveEditor || (async () => false)}
+              onWriteQuit={onWriteQuitEditor || (async () => false)}
+              onQuit={onQuitEditor || (async () => false)}
             />
           ) : (
             <Scrollbars
@@ -162,6 +177,7 @@ const Sidebar = (props: SidebarProps) => {
                       macros,
                       attachDir,
                       useInheritance,
+                      previewRefreshToken,
                     }}
                   />
                 </VStack>

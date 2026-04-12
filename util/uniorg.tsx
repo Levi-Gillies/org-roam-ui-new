@@ -15,6 +15,7 @@ export interface UniOrgProps {
   macros?: { [key: string]: string }
   attachDir: string
   useInheritance: boolean
+  previewRefreshToken?: number
 }
 
 export const UniOrg = (props: UniOrgProps) => {
@@ -31,6 +32,7 @@ export const UniOrg = (props: UniOrgProps) => {
     macros,
     attachDir,
     useInheritance,
+    previewRefreshToken,
   } = props
 
   const [previewText, setPreviewText] = useState('')
@@ -55,7 +57,7 @@ export const UniOrg = (props: UniOrgProps) => {
         console.log(e)
         return 'Could not fetch the text for some reason, sorry!\n\n This can happen because you have an id with forward slashes (/) in it.'
       })
-  }, [previewNode.id])
+  }, [previewNode.id, previewRefreshToken])
 
   return (
     <>

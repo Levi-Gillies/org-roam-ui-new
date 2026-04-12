@@ -6,7 +6,7 @@ body {
   margin: 0;
   font-family: 'VT323', 'Courier New', monospace;
   overflow: hidden;
-  background: #F5E6C8;
+  background: #C6C6C6;
   color: #F0EBE0;
 }
 h1 {
@@ -121,31 +121,55 @@ h1 {
   background: rgba(0, 0, 0, 0.15);
 }
 
-/* Vim command line */
-.vim-command-line {
+/* Touch controls */
+.touch-controls-top-left {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  z-index: 30;
-  padding: 4px 8px;
-  background: rgba(20, 18, 15, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(240, 235, 224, 0.15);
-  display: flex;
-  align-items: center;
+  top: 12px;
+  left: 12px;
+  z-index: 31;
 }
 
-.vim-command-input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #F0EBE0;
+.touch-controls-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 68px;
+  z-index: 31;
+  width: min(440px, calc(100vw - 24px));
+}
+
+.touch-controls-group {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(20, 18, 15, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(240, 235, 224, 0.16);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.touch-controls-toggle {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 32;
+}
+
+.touch-controls-panel button,
+.touch-controls-toggle button,
+.touch-controls-top-left button,
+.vim-editor-header button {
+  border: 1px solid rgba(240, 235, 224, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f0ebe0;
   font-family: 'VT323', 'Courier New', monospace;
-  font-size: 16px;
-  width: 100%;
-  caret-color: #61BB46;
+  letter-spacing: 0.04em;
+}
+
+.touch-controls-panel button:hover,
+.touch-controls-toggle button:hover,
+.touch-controls-top-left button:hover,
+.vim-editor-header button:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Vim help overlay */
@@ -203,45 +227,91 @@ h1 {
   background: rgba(0, 0, 0, 0.15);
 }
 
-/* Vim mode indicator (INSERT / VISUAL) */
-.vim-mode-indicator {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  z-index: 30;
-  padding: 4px 8px;
-  background: rgba(20, 18, 15, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(240, 235, 224, 0.15);
-  color: #61BB46;
-  font-family: 'VT323', 'Courier New', monospace;
-  font-size: 16px;
-  font-weight: bold;
+/* Dedicated Vim editor */
+.vim-editor-shell {
+  height: 100%;
+  min-height: 0;
 }
 
-/* Insert mode textarea */
-.insert-mode-textarea {
-  flex-grow: 1;
+.vim-editor-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(240, 235, 224, 0.12);
+  background: rgba(20, 18, 15, 0.38);
+}
+
+.vim-editor-title {
+  color: #f0ebe0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.vim-editor-subtitle {
+  margin-top: 4px;
+  color: rgba(240, 235, 224, 0.65);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.vim-editor-shell .react-codemirror2,
+.vim-editor-shell .CodeMirror {
   width: 100%;
   height: 100%;
+}
+
+.vim-editor-shell .CodeMirror {
   background: transparent;
-  border: none;
-  outline: none;
   color: #F0EBE0;
   font-family: 'VT323', 'Courier New', monospace;
-  font-size: 15px;
-  line-height: 1.6;
-  padding: 16px;
-  resize: none;
+  font-size: 20px;
+  line-height: 1.5;
   caret-color: #61BB46;
 }
 
-/* Visual mode */
-.floating-sidebar.visual-mode {
-  user-select: text;
-  -webkit-user-select: text;
+.vim-editor-shell .CodeMirror-lines {
+  padding: 12px 0;
+}
+
+.vim-editor-shell .CodeMirror-gutters {
+  background: rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(240, 235, 224, 0.08);
+}
+
+.vim-editor-shell .CodeMirror-linenumber {
+  color: rgba(240, 235, 224, 0.45);
+}
+
+.vim-editor-shell .CodeMirror-cursor {
+  border-left-color: #61bb46;
+}
+
+.vim-editor-shell .CodeMirror-selected {
+  background: rgba(253, 184, 39, 0.25);
+}
+
+.vim-editor-shell .CodeMirror-dialog {
+  background: rgba(20, 18, 15, 0.96);
+  border-bottom: 1px solid rgba(240, 235, 224, 0.16);
+  color: #f0ebe0;
+  font-family: 'VT323', 'Courier New', monospace;
+}
+
+.vim-editor-shell .CodeMirror-dialog input {
+  color: #f0ebe0;
+  font-family: inherit;
+}
+
+.vim-editor-statusbar {
+  min-height: 34px;
+  padding: 6px 14px;
+  border-top: 1px solid rgba(240, 235, 224, 0.12);
+  background: rgba(20, 18, 15, 0.65);
+  color: #61bb46;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+.vim-editor-status-message {
+  color: rgba(240, 235, 224, 0.85);
 }
 
 /* In-node search bar */
@@ -280,4 +350,21 @@ h1 {
 ::highlight(in-node-search-current) {
   background-color: rgba(253, 184, 39, 0.7);
   color: inherit;
+}
+
+@media (max-width: 640px) {
+  .search-container {
+    top: 56px;
+    width: calc(100vw - 24px);
+  }
+
+  .touch-controls-panel {
+    width: calc(100vw - 24px);
+  }
+
+  .floating-sidebar {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+  }
 }
