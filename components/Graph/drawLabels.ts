@@ -4,7 +4,6 @@ import { initialVisuals } from '../config'
 import { LinksByNodeId } from '../../pages'
 import wrap from 'word-wrap'
 import { nodeSize } from '../../util/nodeSize'
-import { hexToRGBA } from '../../util/hexToRGBA'
 
 export interface drawLabelsProps {
   labelBackgroundColor: string
@@ -93,8 +92,7 @@ export function drawLabels(props: drawLabelsProps) {
   // draw label text
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const labelText = hexToRGBA('black', textOpacity)
-  ctx.fillStyle = labelText
+  ctx.fillStyle = `rgba(0, 0, 0, ${isFinite(textOpacity) ? textOpacity : 1})`
   ctx.font = `${fontSize}px 'VT323', 'Courier New', monospace`
   const wordsArray = wrap(label, { width: visuals.labelWordWrap }).split('\n')
 
