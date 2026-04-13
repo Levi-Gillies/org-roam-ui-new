@@ -1,10 +1,11 @@
-import { Box, Button, Flex, Text } from '@chakra-ui/react'
+import { Box, Flex, Text } from '@chakra-ui/react'
 import CodeMirror from 'codemirror'
 import React, { useEffect, useRef, useState } from 'react'
 import { Controlled as ControlledCodeMirror } from 'react-codemirror2'
 
 import 'codemirror/addon/dialog/dialog'
 import 'codemirror/addon/edit/matchbrackets'
+import 'codemirror/addon/mode/simple'
 import 'codemirror/addon/scroll/annotatescrollbar'
 import 'codemirror/addon/search/matchesonscrollbar'
 import 'codemirror/addon/search/search'
@@ -24,6 +25,7 @@ interface VimNodeEditorProps {
 
 let exCommandsRegistered = false
 const CodeMirrorVim = CodeMirror as any
+let orgModeRegistered = false
 
 const getEditorHandlers = (cm: CodeMirror.Editor) =>
   (cm as CodeMirror.Editor & {
@@ -59,6 +61,31 @@ const registerExCommands = () => {
   exCommandsRegistered = true
 }
 
+const registerOrgMode = () => {
+  if (orgModeRegistered) {
+    return
+  }
+
+  CodeMirrorVim.defineSimpleMode('orgmode', {
+    start: [
+      { regex: /^(\*+\s.*)$/, token: 'header' },
+      { regex: /^(#\+[A-Z_]+:.*)$/, token: 'meta' },
+      { regex: /^(\s*[-+]\s+\[[ X-]\].*)$/, token: 'variable-2' },
+      { regex: /\[\[[^\]]+\](?:\[[^\]]*\])?\]/, token: 'link' },
+      { regex: /\*[^*\n]+\*/, token: 'strong' },
+      { regex: /\/[^\/\n]+\//, token: 'em' },
+      { regex: /=[^=\n]+=|~[^~\n]+~/, token: 'quote' },
+      { regex: /:(?:[A-Za-z0-9_@#%:-]+:)+/, token: 'tag' },
+      { regex: /\b(TODO|NEXT|WAITING|DONE|CANCELLED)\b/, token: 'keyword' },
+    ],
+    meta: {
+      lineComment: '# ',
+    },
+  })
+
+  orgModeRegistered = true
+}
+
 const getModeLabel = (mode: { mode: string; subMode?: string } | undefined) => {
   if (!mode) {
     return 'NORMAL'
@@ -88,9 +115,16 @@ export const VimNodeEditor = ({
 }: VimNodeEditorProps) => {
   const editorRef = useRef<CodeMirror.Editor | null>(null)
   const [modeLabel, setModeLabel] = useState('NORMAL')
+  const modeClass =
+    modeLabel.startsWith('VISUAL')
+      ? 'vim-mode-visual'
+      : modeLabel === 'INSERT'
+        ? 'vim-mode-insert'
+        : 'vim-mode-normal'
 
   useEffect(() => {
     registerExCommands()
+    registerOrgMode()
   }, [])
 
   useEffect(() => {
@@ -109,41 +143,31 @@ export const VimNodeEditor = ({
   }, [onQuit, onSave, onWriteQuit])
 
   return (
-    <Flex className="vim-editor-shell" direction="column" h="100%">
+    <Flex className={`vim-editor-shell ${modeClass}`} direction="column" h="100%">
       <Flex className="vim-editor-header" justify="space-between" align="center" gap={3}>
         <Box minW={0}>
           <Text className="vim-editor-title" isTruncated>
             {nodeTitle}
           </Text>
-          <Text className="vim-editor-subtitle">
-            {dirty ? '[+]' : '[saved]'} {modeLabel}
-          </Text>
         </Box>
-        <Flex gap={2} wrap="wrap" justify="flex-end">
-          <Button size="sm" onClick={() => void onSave()}>
-            :w
-          </Button>
-          <Button size="sm" onClick={() => void onWriteQuit()}>
-            :wq
-          </Button>
-          <Button size="sm" onClick={() => void onQuit()}>
-            :q
-          </Button>
-          <Button size="sm" onClick={() => void onQuit(true)}>
-            :q!
-          </Button>
-        </Flex>
       </Flex>
       <Box flex="1" minH={0}>
         <ControlledCodeMirror
           value={value}
           options={{
             keyMap: 'vim',
+            mode: 'orgmode',
             lineNumbers: true,
             lineWrapping: true,
             matchBrackets: true,
             scrollbarStyle: 'native',
             viewportMargin: Infinity,
+            cursorHeight: 0.9,
+            extraKeys: {
+              'Alt-F': () => {
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', altKey: true }))
+              },
+            },
           }}
           editorDidMount={(editor) => {
             editorRef.current = editor
@@ -170,7 +194,7 @@ export const VimNodeEditor = ({
       <Flex className="vim-editor-statusbar" justify="space-between" align="center" gap={4}>
         <Text>{modeLabel}</Text>
         <Text className="vim-editor-status-message" isTruncated>
-          {statusMessage || (dirty ? 'Unsaved changes' : 'Ready')}
+          {statusMessage || (dirty ? '[+]' : '[saved]')}
         </Text>
       </Flex>
     </Flex>

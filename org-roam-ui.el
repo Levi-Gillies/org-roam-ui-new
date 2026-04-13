@@ -219,6 +219,8 @@ Takes _WS and FRAME as arguments."
          (data (alist-get 'data msg)))
     (cond ((string= command "open")
            (org-roam-ui--on-msg-open-node data))
+          ((string= command "save")
+           (org-roam-ui--on-msg-save-node data))
           ((string= command "delete")
            (org-roam-ui--on-msg-delete-node data))
           ((string= command "create")
@@ -260,6 +262,52 @@ TODO: Be able to delete individual nodes."
     (delete-file (alist-get 'file data))
     (org-roam-db-sync)
     (org-roam-ui--send-graphdata)))
+
+(defun org-roam-ui--send-save-result (ws ok &optional message)
+  "Send save result through websocket WS.
+OK indicates success. MESSAGE is optional detail."
+  (websocket-send-text
+   ws
+   (json-encode
+    `((type . "saveResult")
+      (data . ((ok . ,(if ok t :json-false))
+               (message . ,(or message ""))))))))
+
+(defun org-roam-ui--save-node-text (id content)
+  "Save CONTENT into org-roam node ID."
+  (let* ((node (org-roam-populate (org-roam-node-create :id id)))
+         (file (org-roam-node-file node))
+         (buf (find-file-noselect file)))
+    (with-current-buffer buf
+      (save-restriction
+        (widen)
+        (save-excursion
+          (if (= (org-roam-node-level node) 0)
+              (progn
+                (erase-buffer)
+                (insert content))
+            (goto-char (org-roam-node-point node))
+            (org-back-to-heading t)
+            (save-restriction
+              (org-narrow-to-element)
+              (delete-region (point-min) (point-max))
+              (goto-char (point-min))
+              (insert content)))))
+      (save-buffer))))
+
+(defun org-roam-ui--on-msg-save-node (data)
+  "Save a node when receiving DATA from the websocket."
+  (let ((id (alist-get 'id data))
+        (content (alist-get 'content data)))
+    (condition-case err
+        (progn
+          (org-roam-ui--save-node-text id content)
+          (org-roam-ui--send-save-result org-roam-ui-ws-socket t "Saved"))
+      (error
+       (org-roam-ui--send-save-result
+        org-roam-ui-ws-socket
+        nil
+        (error-message-string err))))))
 
 (defun org-roam-ui--on-msg-create-node (data)
   "Create a node when receiving DATA from the websocket."

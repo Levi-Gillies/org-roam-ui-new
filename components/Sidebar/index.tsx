@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { AddIcon, CloseIcon, MinusIcon } from '@chakra-ui/icons'
 
 import { TagBar } from './TagBar'
 import { Note } from './Note'
 import { Title } from './Title'
 
-import { VStack, Flex, Box } from '@chakra-ui/react'
+import { VStack, Flex, Box, IconButton } from '@chakra-ui/react'
 import { Scrollbars } from 'react-custom-scrollbars-2'
 
 import { NodeObject } from 'force-graph'
@@ -39,6 +40,10 @@ export interface SidebarProps {
   useInheritance: boolean
   collapse: boolean
   setCollapse: (fn: (c: boolean) => boolean) => void
+  showNodeUi?: boolean
+  isFullscreen?: boolean
+  onToggleCollapse?: () => void
+  onCloseNode?: () => void
   scrollRef?: (instance: any) => void
   isEditorMode?: boolean
   editorText?: string
@@ -79,6 +84,10 @@ const Sidebar = (props: SidebarProps) => {
     useInheritance,
     collapse,
     setCollapse,
+    showNodeUi,
+    isFullscreen,
+    onToggleCollapse,
+    onCloseNode,
     scrollRef,
     isEditorMode,
     editorText,
@@ -118,8 +127,29 @@ const Sidebar = (props: SidebarProps) => {
 
   return (
     <>
-      <div className="floating-sidebar-backdrop" onClick={onClose} />
-      <div className="floating-sidebar">
+      <div
+        className={`floating-sidebar-backdrop${isFullscreen ? ' fullscreen' : ''}`}
+        onClick={onClose}
+      />
+      <div className={`floating-sidebar${isFullscreen ? ' fullscreen' : ''}`}>
+        {showNodeUi && (
+          <div className="node-overlay-controls">
+            <IconButton
+              aria-label={collapse ? 'Expand headings' : 'Collapse headings'}
+              icon={collapse ? <AddIcon /> : <MinusIcon />}
+              size="sm"
+              variant="ghost"
+              onClick={onToggleCollapse}
+            />
+            <IconButton
+              aria-label="Close node"
+              icon={<CloseIcon />}
+              size="sm"
+              variant="ghost"
+              onClick={onCloseNode || onClose}
+            />
+          </div>
+        )}
         <Flex flexDir="column" h="100%" pl={2} width="100%">
           {isEditorMode ? (
             <VimNodeEditor

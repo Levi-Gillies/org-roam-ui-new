@@ -13,6 +13,7 @@ const keybindings = [
   ['h / l', 'Previous / next preview node'],
   ['Tab', 'Toggle collapse/expand headings'],
   ['e', 'Open the current node in Vim editor'],
+  ['Alt+f', 'Toggle node fullscreen'],
   ['g g', 'Scroll to top'],
   ['G', 'Scroll to bottom'],
   ['Ctrl+d / Ctrl+u', 'Half-page scroll down / up'],

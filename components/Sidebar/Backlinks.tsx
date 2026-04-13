@@ -49,11 +49,20 @@ export const Backlinks = (props: BacklinksProps) => {
     .map((l) => l.source)
 
   return (
-    <Box className="backlinks" borderRadius="sm" mt={6} p={4} bg="white" mb={10}>
-      <p style={{ fontSize: 16, fontWeight: 600 }}>{`Linked references (${backLinks.length})`}</p>
+    <Box
+      className="backlinks"
+      borderRadius="sm"
+      mt={5}
+      p={3}
+      bg="white"
+      mb={5}
+      maxH="180px"
+      overflowY="auto"
+    >
+      <p style={{ fontSize: 13, fontWeight: 600 }}>{`Linked references (${backLinks.length})`}</p>
       <VStack
-        py={2}
-        spacing={3}
+        py={1}
+        spacing={2}
         alignItems="start"
         divider={<StackDivider borderColor="gray.500" />}
         align="stretch"
@@ -63,7 +72,7 @@ export const Backlinks = (props: BacklinksProps) => {
           backLinks.map((link) => {
             const title = nodeById[link as string]?.title ?? ''
             return (
-              <Box overflow="hidden" py={1} borderRadius="sm" width="100%" key={link}>
+              <Box overflow="hidden" py={0.5} borderRadius="sm" width="100%" key={link}>
                 <PreviewLink
                   linksByNodeId={linksByNodeId}
                   nodeByCite={nodeByCite}

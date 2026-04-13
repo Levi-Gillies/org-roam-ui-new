@@ -1,7 +1,9 @@
+import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons'
 import {
   Button,
   Box,
   Flex,
+  IconButton,
   useDisclosure,
   useOutsideClick,
   useTheme,
@@ -301,8 +303,12 @@ export function GraphPage() {
   const [editorSavedText, setEditorSavedText] = useState('')
   const [editorStatusMessage, setEditorStatusMessage] = useState('')
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
-  const [isEditorSaving, setIsEditorSaving] = useState(false)
+  const [isNodeFullscreen, setIsNodeFullscreen] = useState(false)
   const editorNodeRef = useRef<OrgRoamNode | null>(null)
+  const pendingSaveRequestRef = useRef<{
+    resolve: (result: { ok: boolean; message: string }) => void
+    timeoutId: ReturnType<typeof setTimeout>
+  } | null>(null)
 
   // In-node search state
   const [inNodeSearch, setInNodeSearch] = useState(false)
@@ -334,6 +340,7 @@ export function GraphPage() {
 
   const closePreview = useCallback(() => {
     setIsEditorMode(false)
+    setIsNodeFullscreen(false)
     setEditorText('')
     setEditorSavedText('')
     setEditorStatusMessage('')
@@ -344,6 +351,13 @@ export function GraphPage() {
     onClose()
     setPreviewNode({})
   }, [clearInNodeSearch, onClose, setPreviewNode])
+
+  const toggleNodeFullscreen = useCallback(() => {
+    if (!isOpen) {
+      return
+    }
+    setIsNodeFullscreen((value) => !value)
+  }, [isOpen])
 
   const updateGraphData = (orgRoamGraphData: OrgRoamGraphReponse) => {
     const oldNodeById = nodeByIdRef.current
@@ -642,6 +656,18 @@ export function GraphPage() {
       switch (message.type) {
         case 'graphdata':
           return updateGraphData(message.data)
+        case 'saveResult': {
+          const pendingSave = pendingSaveRequestRef.current
+          if (!pendingSave) {
+            return
+          }
+          clearTimeout(pendingSave.timeoutId)
+          pendingSaveRequestRef.current = null
+          return pendingSave.resolve({
+            ok: Boolean(message?.data?.ok),
+            message: message?.data?.message || '',
+          })
+        }
         case 'variables':
           setEmacsVariables(message.data)
           console.log(message)
@@ -753,11 +779,41 @@ export function GraphPage() {
     editorNodeRef.current = node
     setEditorText(text)
     setEditorSavedText(text)
-    setEditorStatusMessage('Vim editor ready. Use :w to save or :wq to save and return.')
+    setEditorStatusMessage('')
     clearInNodeSearch()
     setVimMode('normal')
     setIsEditorMode(true)
   }, [clearInNodeSearch, fetchNodeText, previewNode])
+
+  const saveNodeThroughEmacs = useCallback((node: OrgRoamNode, content: string) => {
+    return new Promise<{ ok: boolean; message: string }>((resolve) => {
+      const ws = WebSocketRef.current
+      if (!ws || ws.readyState !== 1) {
+        resolve({ ok: false, message: 'Emacs connection is not available' })
+        return
+      }
+
+      if (pendingSaveRequestRef.current) {
+        clearTimeout(pendingSaveRequestRef.current.timeoutId)
+      }
+
+      const timeoutId = setTimeout(() => {
+        if (!pendingSaveRequestRef.current) {
+          return
+        }
+        pendingSaveRequestRef.current = null
+        resolve({ ok: false, message: 'Save request timed out' })
+      }, 10000)
+
+      pendingSaveRequestRef.current = { resolve, timeoutId }
+      ws.send(
+        JSON.stringify({
+          command: 'save',
+          data: { id: node.id, content },
+        }),
+      )
+    })
+  }, [])
 
   const saveEditor = useCallback(async () => {
     const node = editorNodeRef.current
@@ -765,26 +821,32 @@ export function GraphPage() {
       return false
     }
 
-    setIsEditorSaving(true)
     setEditorStatusMessage('Saving...')
 
     try {
-      const res = await fetch('/api/save-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: node.file,
-          content: editorText,
-          pos: node.pos,
-          level: node.level,
-        }),
-      })
+      let result = await saveNodeThroughEmacs(node, editorText)
+      if (!result.ok && node.file) {
+        const res = await fetch('/api/save-node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filePath: node.file,
+            content: editorText,
+            pos: node.pos,
+            level: node.level,
+          }),
+        })
 
-      if (!res.ok) {
-        const body = await res.text()
-        throw new Error(body || 'Save failed')
+        if (res.ok) {
+          result = { ok: true, message: 'Saved' }
+        } else {
+          result = { ok: false, message: (await res.text()) || 'Save failed' }
+        }
       }
 
+      if (!result.ok) {
+        throw new Error(result.message || 'Save failed')
+      }
       setEditorSavedText(editorText)
       setPreviewRefreshToken((value) => value + 1)
       setEditorStatusMessage('Saved')
@@ -792,10 +854,8 @@ export function GraphPage() {
     } catch (error: any) {
       setEditorStatusMessage(error?.message || 'Save failed')
       return false
-    } finally {
-      setIsEditorSaving(false)
     }
-  }, [editorText])
+  }, [editorText, saveNodeThroughEmacs])
 
   const quitEditor = useCallback(async (force = false) => {
     if (editorDirty && !force) {
@@ -896,6 +956,12 @@ export function GraphPage() {
 
       const tag = (document.activeElement?.tagName || '').toLowerCase()
       const isInput = tag === 'input' || tag === 'textarea' || tag === 'select'
+
+      if (e.altKey && e.key.toLowerCase() === 'f' && isOpen) {
+        e.preventDefault()
+        toggleNodeFullscreen()
+        return
+      }
 
       // Search mode — only handle Escape to exit
       if (vimMode === 'search') {
@@ -1096,6 +1162,7 @@ export function GraphPage() {
     previousPreviewNode,
     setThreeDim,
     showVimHelp,
+    toggleNodeFullscreen,
     touchControlsVisible,
     vimMode,
     zoomToPreviewNode,
@@ -1166,40 +1233,7 @@ export function GraphPage() {
     'mainWindowWidth',
     windowWidth,
   )
-  const touchSearchVisible = touchControlsVisible || searchVisible
-
-  const focusGraphSearch = useCallback(() => {
-    setSearchVisible(true)
-    setVimMode('search')
-    setTimeout(() => searchInputRef.current?.focus(), 50)
-  }, [])
-
-  const startInNodeSearch = useCallback(() => {
-    setInNodeSearch(true)
-    setInNodeSearchQuery('')
-    setInNodeSearchMatches([])
-    setInNodeSearchCurrentIndex(0)
-    setVimMode('inNodeSearch')
-  }, [])
-
-  const scrollSidebarBy = useCallback((delta: number) => {
-    if (!sidebarScrollRef.current) {
-      return
-    }
-    const current = sidebarScrollRef.current.getScrollTop()
-    sidebarScrollRef.current.scrollTop(current + delta)
-  }, [])
-
-  const scrollSidebarToEdge = useCallback((direction: 'top' | 'bottom') => {
-    if (!sidebarScrollRef.current) {
-      return
-    }
-    if (direction === 'top') {
-      sidebarScrollRef.current.scrollTop(0)
-      return
-    }
-    sidebarScrollRef.current.scrollToBottom()
-  }, [])
+  const touchSearchVisible = !isOpen && (touchControlsVisible || searchVisible)
 
   return (
     <VariablesContext.Provider value={{ ...emacsVariables }}>
@@ -1226,80 +1260,23 @@ export function GraphPage() {
           inputRef={searchInputRef}
           aboveSidebar={isOpen}
         />
-        {touchControlsVisible && (
-          <>
-            <Box className="touch-controls-top-left">
-              <Button size="sm" onClick={() => setThreeDim((value) => !value)}>
-                {threeDim ? '2D' : '3D'}
-              </Button>
-            </Box>
-            <Box className="touch-controls-panel">
-              <Flex className="touch-controls-group" gap={2} wrap="wrap" justify="flex-end">
-                <Button size="sm" onClick={focusGraphSearch}>
-                  Search
-                </Button>
-                <Button size="sm" onClick={() => setShowVimHelp((value) => !value)}>
-                  Help
-                </Button>
-                {!isEditorMode && isOpen && (
-                  <>
-                    <Button size="sm" onClick={startInNodeSearch}>
-                      Find
-                    </Button>
-                    <Button size="sm" onClick={() => void openVimEditor()}>
-                      Vim
-                    </Button>
-                    <Button size="sm" onClick={closePreview}>
-                      Close
-                    </Button>
-                    <Button size="sm" onClick={() => previousPreviewNode()} isDisabled={!canUndo}>
-                      Prev
-                    </Button>
-                    <Button size="sm" onClick={() => nextPreviewNode()} isDisabled={!canRedo}>
-                      Next
-                    </Button>
-                    <Button size="sm" onClick={() => setCollapse((value) => !value)}>
-                      {collapse ? 'Expand' : 'Collapse'}
-                    </Button>
-                    <Button size="sm" onClick={() => scrollSidebarBy(-180)}>
-                      Up
-                    </Button>
-                    <Button size="sm" onClick={() => scrollSidebarBy(180)}>
-                      Down
-                    </Button>
-                    <Button size="sm" onClick={() => scrollSidebarToEdge('top')}>
-                      Top
-                    </Button>
-                    <Button size="sm" onClick={() => scrollSidebarToEdge('bottom')}>
-                      Bottom
-                    </Button>
-                  </>
-                )}
-                {isEditorMode && (
-                  <>
-                    <Button size="sm" onClick={() => void saveEditor()} isLoading={isEditorSaving}>
-                      Save
-                    </Button>
-                    <Button size="sm" onClick={() => void writeQuitEditor()} isLoading={isEditorSaving}>
-                      WQ
-                    </Button>
-                    <Button size="sm" onClick={() => void quitEditor()} isDisabled={isEditorSaving}>
-                      View
-                    </Button>
-                    <Button size="sm" onClick={() => void quitEditor(true)} isDisabled={isEditorSaving}>
-                      Discard
-                    </Button>
-                  </>
-                )}
-              </Flex>
-            </Box>
-          </>
+        {touchControlsVisible && !isOpen && (
+          <Box className="touch-controls-top-left">
+            <Button size="sm" className="graph-mode-toggle" onClick={() => setThreeDim((value) => !value)}>
+              {threeDim ? '2D' : '3D'}
+            </Button>
+          </Box>
         )}
-        <Box className="touch-controls-toggle">
-          <Button size="sm" onClick={() => setTouchControlsVisible((value) => !value)}>
-            {touchControlsVisible ? 'Hide UI' : 'Show UI'}
-          </Button>
-        </Box>
+        {!isOpen && (
+          <Box className="touch-controls-toggle">
+            <IconButton
+              size="sm"
+              aria-label={touchControlsVisible ? 'Hide interface controls' : 'Show interface controls'}
+              icon={touchControlsVisible ? <ViewOffIcon /> : <ViewIcon />}
+              onClick={() => setTouchControlsVisible((value) => !value)}
+            />
+          </Box>
+        )}
         <Box position="absolute">
           {graphData && (
             <Graph
@@ -1356,6 +1333,9 @@ export function GraphPage() {
             setFilter,
             collapse,
             setCollapse,
+            showNodeUi: touchControlsVisible,
+            isFullscreen: isNodeFullscreen,
+            onToggleCollapse: () => setCollapse((value) => !value),
             isEditorMode,
             editorText,
             setEditorText,
@@ -1364,6 +1344,7 @@ export function GraphPage() {
             onQuitEditor: quitEditor,
             editorDirty,
             editorStatusMessage,
+            onCloseNode: closePreview,
             previewRefreshToken,
             inNodeSearch,
             inNodeSearchQuery,
@@ -2051,7 +2032,7 @@ export const Graph = function (props: GraphProps) {
             sprite.backgroundColor = 'rgba(0, 0, 0, 0)'
             sprite.padding = 0
             sprite.textHeight = 8
-            ;(sprite as any).position.set(0, -14, 0)
+            ;(sprite as any).position.set(0, 14, 0)
 
             if ((sprite as any).material) {
               ;(sprite as any).material.depthWrite = false

@@ -36,8 +36,6 @@ export const getLabelOpacity = (
 
 export function drawLabels(props: drawLabelsProps) {
   const {
-    labelBackgroundColor,
-    labelTextColor,
     node,
     ctx,
     globalScale,
@@ -90,32 +88,12 @@ export function drawLabels(props: drawLabelsProps) {
       Math.pow(globalScale, visuals.nodeZoomSize),
   )
   const fontSize = visuals.labelFontSize / Math.cbrt(Math.pow(globalScale, visuals.nodeZoomSize))
-  //   ? Math.max((visuals.labelFontSize * nodeS) / 2, (visuals.labelFontSize * nodeS) / 3)
-  //    : (visuals.labelFontSize * nodeS) / 3
-
-  //  * nodeS) / 3
   const textOpacity = getLabelOpacity(fadeFactor, visuals, globalScale, opacity, isHighlighty)
-  if (visuals.labelBackgroundColor) {
-    const textWidth = ctx.measureText(label).width
-    const bckgDimensions = [textWidth * 1.1, fontSize].map((n) => n + fontSize * 0.5) as [
-      number,
-      number,
-    ]
-    const bgOpacity = visuals.labelBackgroundOpacity || 0.75
-    const backgroundOpacity = textOpacity * bgOpacity
-    const labelBackground = hexToRGBA(labelBackgroundColor, backgroundOpacity)
-    ctx.fillStyle = labelBackground
-    ctx.fillRect(
-      node.x! - bckgDimensions[0] / 2,
-      node.y! - bckgDimensions[1] / 2 + nodeS,
-      ...bckgDimensions,
-    )
-  }
 
   // draw label text
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const labelText = hexToRGBA(labelTextColor, textOpacity)
+  const labelText = hexToRGBA('black', textOpacity)
   ctx.fillStyle = labelText
   ctx.font = `${fontSize}px 'VT323', 'Courier New', monospace`
   const wordsArray = wrap(label, { width: visuals.labelWordWrap }).split('\n')
@@ -128,11 +106,14 @@ export function drawLabels(props: drawLabelsProps) {
   const highlightedNodeOffset = [hoverId, lastHoverId].includes((node as OrgRoamNode).id)
     ? 1 + 0.3 * opacity
     : 1
+  const lineCount = truncatedWords.length
+  const lineHeight = visuals.labelLineSpace * fontSize
+  const startY = node.y! - highlightedNodeOffset * nodeS * 8 - lineHeight * (lineCount - 1)
   truncatedWords.forEach((word, index) => {
     ctx.fillText(
       word,
       node.x!,
-      node.y! + highlightedNodeOffset * nodeS * 8 + visuals.labelLineSpace * fontSize * index,
+      startY + lineHeight * index,
     )
   })
 }
