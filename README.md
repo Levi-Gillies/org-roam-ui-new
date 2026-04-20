@@ -1,12 +1,31 @@
 # org-roam-ui (custom fork)
 
-A graphical frontend for your [org-roam](https://github.com/org-roam/org-roam) Zettelkasten, forked from [org-roam/org-roam-ui](https://github.com/org-roam/org-roam-ui).
+This is a heavily customized fork of [org-roam/org-roam-ui](https://github.com/org-roam/org-roam-ui).
 
-This fork features a retro Apple II aesthetic with vim-style keybindings, a centered floating note viewer, and a built-in search bar.
+It is no longer the stock tweak-panel graph UI. This fork is built around:
+
+- a minimal graph view
+- a centered floating node reader
+- keyboard-first navigation
+- an in-browser Vim editor for node text
+- a very small touch/mobile UI that can be toggled on when needed
+
+The static site is served from `out/`, and the Emacs integration lives in `org-roam-ui.el`.
+
+## What This Fork Does
+
+- 2D and 3D graph modes
+- black node labels rendered above the nodes for readability
+- click a node to open it in a floating reader
+- `/` to search the graph or search inside the open node
+- `e` to open the current node in Vim mode
+- `Alt+f` to toggle node fullscreen mode
+- `t` to toggle 2D/3D
+- optional touch UI for phone use
 
 ## Installation
 
-This fork is **not on MELPA**. Install it directly from GitHub.
+This fork is not on MELPA. Install it directly from GitHub.
 
 ### Doom Emacs
 
@@ -30,7 +49,7 @@ In `config.el`:
   (setq org-roam-ui-sync-theme t
         org-roam-ui-follow t
         org-roam-ui-update-on-save t
-        org-roam-ui-open-on-start t))
+        org-roam-ui-open-on-start nil))
 ```
 
 ### straight/use-package
@@ -38,90 +57,178 @@ In `config.el`:
 ```emacs-lisp
 (use-package org-roam-ui
   :straight
-    (:host github :repo "levi-gillies/org-roam-ui" :branch "main" :files ("*.el" "out"))
+  (:host github :repo "levi-gillies/org-roam-ui" :branch "main" :files ("*.el" "out"))
   :after org-roam
   :config
   (setq org-roam-ui-sync-theme t
         org-roam-ui-follow t
         org-roam-ui-update-on-save t
-        org-roam-ui-open-on-start t))
+        org-roam-ui-open-on-start nil))
 ```
 
-### Manual (package.el)
+### Manual
 
 ```bash
 git clone https://github.com/levi-gillies/org-roam-ui ~/.emacs.d/org-roam-ui
 ```
 
-In your init file:
+Then in your init:
 
 ```emacs-lisp
 (add-to-list 'load-path "~/.emacs.d/org-roam-ui")
 (require 'org-roam-ui)
 ```
 
-## Usage
+## Running It
 
-Run `M-x org-roam-ui-mode RET` to start the web server on `http://127.0.0.1:35901/`.
+Start the Emacs side:
 
-- **Search**: Press `/` to open the search bar, find and zoom to nodes
-- **Note preview**: Click a node or select a search result to open the floating note viewer
-- **Navigation**: Use back/forward arrows and the collapse toggle in the note viewer toolbar
-- **2D/3D toggle**: Click the button in the top-left corner or press `t`
+```text
+M-x org-roam-ui-mode
+```
+
+That serves the exported frontend on:
+
+```text
+http://127.0.0.1:35901/
+```
+
+The frontend talks to Emacs over websocket on port `35903`.
+
+## How To Use It
+
+### Graph
+
+- click a node to open it
+- press `/` to open graph search
+- press `t` to toggle 2D/3D
+- press `z z` to center on the current node
+
+### Open Node
+
+- `Tab` toggles collapse/expand
+- `/` searches inside the open node
+- `n` and `N` move between in-node search matches
+- `j` / `k` scroll
+- `g g` jumps to top
+- `G` jumps to bottom
+- `Ctrl+d` / `Ctrl+u` half-page scroll
+- `Alt+f` toggles fullscreen for the open node
+- `Escape` closes search/help/sidebar
+
+### Vim Mode
+
+Open the current node in Vim mode with:
+
+```text
+e
+```
+
+Inside Vim mode:
+
+- normal / insert / visual modes are supported through CodeMirror Vim
+- line numbers are shown
+- Org syntax is highlighted
+- `:w` saves
+- `:q` exits only if clean
+- `:q!` discards unsaved changes
+- `:wq` saves and exits
+- `:x` saves and exits
+
+Saving is done through the Emacs websocket path, not a standalone server API.
+
+## Touch UI
+
+The touch UI is off by default.
+
+When no node is open:
+
+- tap the eye icon in the bottom-right to show or hide touch controls
+- when enabled, the search bar appears
+- when enabled, the 2D/3D toggle appears in the top-left
+
+When a node is open:
+
+- the graph search bar and graph controls disappear
+- only minimal node controls remain
+- `X` closes the node
+- the collapse icon toggles folded headings
 
 ## Keybindings
 
-This fork uses vim-style keybindings for navigation:
-
 | Key | Action |
-|-----|--------|
-| `/` | Open search bar |
-| `Escape` | Close search / sidebar / help |
+| --- | --- |
+| `/` | Search graph, or search inside the current node |
+| `Escape` | Close search/help/sidebar |
 | `t` | Toggle 2D/3D |
-| `j` / `k` | Scroll sidebar down / up |
+| `e` | Open current node in Vim mode |
+| `Alt+f` | Toggle fullscreen for the open node |
+| `Tab` | Collapse/expand headings |
+| `j` / `k` | Scroll node down / up |
 | `h` / `l` | Previous / next preview node |
-| `g g` | Scroll to top of sidebar |
-| `G` | Scroll to bottom of sidebar |
-| `Ctrl+d` / `Ctrl+u` | Half-page scroll down / up |
-| `z z` | Center/zoom to current node |
-| `:` | Open command mode |
-| `:q` + Enter | Close sidebar |
-| `:help` + Enter | Show keybinding help |
-| `?` | Toggle keybinding help overlay |
+| `n` / `N` | Next / previous in-node search match |
+| `g g` | Jump to top |
+| `G` | Jump to bottom |
+| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `z z` | Center current node in graph |
+| `?` | Toggle help overlay |
 
-## Retro Apple II Theme
+## Visual Defaults
 
-The graph uses a retro Apple II inspired color scheme:
-- **Background**: Warm beige (#F5E6C8)
-- **Nodes**: Apple rainbow colors (green, yellow, orange, red, purple, blue)
-- **Links**: Muted retro green
-- **Labels**: Off-white on terminal font (VT323)
-- **Font**: VT323 monospace throughout
+Current defaults include:
 
-## Customization
+- background: `#c6c6c6`
+- black graph labels
+- labels rendered above nodes
+- floating reader for opened notes
+- smaller backlinks box
 
-Visual defaults live in `components/config.ts` (the `initialVisuals` object). You can tweak node colors, link styles, label settings, and more. Settings are persisted in the browser's localStorage.
+Main visual defaults live in:
 
-Additional styles can be modified in `styles/globals.css`.
-
-### Changing the background
-
-The background color is set in `components/config.ts` in the `initialVisuals` object:
-
-```ts
-backgroundColor: '#F5E6C8',  // default: retro beige
-// Change to any CSS color or Chakra UI color token, e.g.:
-// backgroundColor: 'gray.900',
-// backgroundColor: 'transparent',  // for OBS overlays
-```
+- `components/config.ts`
+- `styles/globals.css`
 
 ## Development
 
+Install dependencies:
+
 ```bash
-git clone https://github.com/levi-gillies/org-roam-ui
-cd org-roam-ui
 yarn
+```
+
+Run local dev server:
+
+```bash
 yarn dev
 ```
 
-A development server will start on `localhost:3000`.
+The scripts already include the OpenSSL compatibility flag needed for newer Node versions.
+
+## Building The Static Site
+
+This fork uses a custom Next build dir:
+
+```text
+build/
+```
+
+and exports the static site to:
+
+```text
+out/
+```
+
+To regenerate the deployable static frontend:
+
+```bash
+yarn export
+```
+
+That script now runs the required build step first and then exports.
+
+If you deploy this through Emacs or behind nginx on another machine, you need both:
+
+- updated `out/`
+- updated `org-roam-ui.el`
+
+If you only update `out/` but not `org-roam-ui.el`, frontend and backend behavior can drift.
