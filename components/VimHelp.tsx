@@ -6,14 +6,16 @@ interface VimHelpProps {
 
 const keybindings = [
   ['/', 'Search nodes / search in node (sidebar)'],
+  ['c', 'Create a new note'],
   ['n / N', 'Next / previous search match'],
   ['Escape', 'Close search/help/sidebar'],
   ['t', 'Toggle 2D/3D'],
   ['j / k', 'Scroll sidebar down / up'],
   ['h / l', 'Previous / next preview node'],
   ['Tab', 'Toggle collapse/expand headings'],
+  ['Click heading', 'Toggle an individual heading'],
   ['e', 'Open the current node in Vim editor'],
-  ['Alt+f', 'Toggle node fullscreen'],
+  ['f', 'Toggle node fullscreen'],
   ['g g', 'Scroll to top'],
   ['G', 'Scroll to bottom'],
   ['Ctrl+d / Ctrl+u', 'Half-page scroll down / up'],

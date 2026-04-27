@@ -1,9 +1,8 @@
-import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons'
+import { AddIcon } from '@chakra-ui/icons'
 import {
   Button,
   Box,
   Flex,
-  IconButton,
   useDisclosure,
   useOutsideClick,
   useTheme,
@@ -93,7 +92,6 @@ export type Scope = {
 
 interface SearchBarProps {
   graphData: GraphData | null
-  nodeById: NodeById
   setPreviewNode: any
   graphRef: any
   threeDim: boolean
@@ -103,7 +101,7 @@ interface SearchBarProps {
   aboveSidebar?: boolean
 }
 
-function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, visible, onHide, inputRef, aboveSidebar }: SearchBarProps) {
+function SearchBar({ graphData, setPreviewNode, graphRef, threeDim, visible, onHide, inputRef, aboveSidebar }: SearchBarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<OrgRoamNode[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -202,6 +200,71 @@ function SearchBar({ graphData, nodeById, setPreviewNode, graphRef, threeDim, vi
   )
 }
 
+interface CreateNoteModalProps {
+  isOpen: boolean
+  title: string
+  statusMessage: string
+  isSubmitting: boolean
+  inputRef: React.RefObject<HTMLInputElement>
+  onChangeTitle: (title: string) => void
+  onClose: () => void
+  onSubmit: () => void
+}
+
+function CreateNoteModal({
+  isOpen,
+  title,
+  statusMessage,
+  isSubmitting,
+  inputRef,
+  onChangeTitle,
+  onClose,
+  onSubmit,
+}: CreateNoteModalProps) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <>
+      <div className="create-note-backdrop" onClick={onClose} />
+      <div className="create-note-overlay">
+        <h2>New note</h2>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            onSubmit()
+          }}
+        >
+          <input
+            ref={inputRef}
+            className="create-note-input"
+            type="text"
+            placeholder="Note title..."
+            value={title}
+            onChange={(event) => onChangeTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                onClose()
+              }
+            }}
+          />
+          <div className="create-note-actions">
+            <Button size="sm" variant="ghost" onClick={onClose} isDisabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" isLoading={isSubmitting} loadingText="Creating">
+              Create
+            </Button>
+          </div>
+          {statusMessage && <div className="create-note-status">{statusMessage}</div>}
+        </form>
+      </div>
+    </>
+  )
+}
+
 const extractNodeTextFromFile = (fileContent: string, node: OrgRoamNode) => {
   if (!node.level) {
     return fileContent
@@ -288,9 +351,14 @@ export function GraphPage() {
   const [touchControlsVisible, setTouchControlsVisible] = useState(false)
   const [searchVisible, setSearchVisible] = useState(false)
   const [showVimHelp, setShowVimHelp] = useState(false)
+  const [showCreateNote, setShowCreateNote] = useState(false)
+  const [createNoteTitle, setCreateNoteTitle] = useState('')
+  const [createNoteStatusMessage, setCreateNoteStatusMessage] = useState('')
+  const [isCreatingNote, setIsCreatingNote] = useState(false)
   const [vimMode, setVimMode] = useState<'normal' | 'search' | 'inNodeSearch'>('normal')
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const createNoteInputRef = useRef<HTMLInputElement>(null)
   const sidebarScrollRef = useRef<any>(null)
   const pendingKeyTimerRef = useRef<any>(null)
 
@@ -304,9 +372,14 @@ export function GraphPage() {
   const [editorStatusMessage, setEditorStatusMessage] = useState('')
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0)
   const [isNodeFullscreen, setIsNodeFullscreen] = useState(false)
+  const [pendingCreatedNodeId, setPendingCreatedNodeId] = useState<string | null>(null)
   const editorNodeRef = useRef<OrgRoamNode | null>(null)
   const pendingSaveRequestRef = useRef<{
     resolve: (result: { ok: boolean; message: string }) => void
+    timeoutId: ReturnType<typeof setTimeout>
+  } | null>(null)
+  const pendingCreateRequestRef = useRef<{
+    resolve: (result: { ok: boolean; message: string; nodeId?: string }) => void
     timeoutId: ReturnType<typeof setTimeout>
   } | null>(null)
 
@@ -358,6 +431,20 @@ export function GraphPage() {
     }
     setIsNodeFullscreen((value) => !value)
   }, [isOpen])
+
+  const openCreateNoteModal = useCallback(() => {
+    setCreateNoteStatusMessage('')
+    setShowCreateNote(true)
+  }, [])
+
+  const closeCreateNoteModal = useCallback(() => {
+    if (isCreatingNote) {
+      return
+    }
+    setCreateNoteStatusMessage('')
+    setCreateNoteTitle('')
+    setShowCreateNote(false)
+  }, [isCreatingNote])
 
   const updateGraphData = (orgRoamGraphData: OrgRoamGraphReponse) => {
     const oldNodeById = nodeByIdRef.current
@@ -668,6 +755,19 @@ export function GraphPage() {
             message: message?.data?.message || '',
           })
         }
+        case 'createResult': {
+          const pendingCreate = pendingCreateRequestRef.current
+          if (!pendingCreate) {
+            return
+          }
+          clearTimeout(pendingCreate.timeoutId)
+          pendingCreateRequestRef.current = null
+          return pendingCreate.resolve({
+            ok: Boolean(message?.data?.ok),
+            message: message?.data?.message || '',
+            nodeId: message?.data?.nodeId || undefined,
+          })
+        }
         case 'variables':
           setEmacsVariables(message.data)
           console.log(message)
@@ -815,6 +915,63 @@ export function GraphPage() {
     })
   }, [])
 
+  const createNoteThroughEmacs = useCallback((title: string) => {
+    return new Promise<{ ok: boolean; message: string; nodeId?: string }>((resolve) => {
+      const ws = WebSocketRef.current
+      if (!ws || ws.readyState !== 1) {
+        resolve({ ok: false, message: 'Emacs connection is not available' })
+        return
+      }
+
+      if (pendingCreateRequestRef.current) {
+        clearTimeout(pendingCreateRequestRef.current.timeoutId)
+      }
+
+      const timeoutId = setTimeout(() => {
+        if (!pendingCreateRequestRef.current) {
+          return
+        }
+        pendingCreateRequestRef.current = null
+        resolve({ ok: false, message: 'Create request timed out' })
+      }, 10000)
+
+      pendingCreateRequestRef.current = { resolve, timeoutId }
+      ws.send(
+        JSON.stringify({
+          command: 'create',
+          data: { title },
+        }),
+      )
+    })
+  }, [])
+
+  const createNote = useCallback(async () => {
+    const title = createNoteTitle.trim()
+    if (!title) {
+      setCreateNoteStatusMessage('Title is required')
+      return
+    }
+
+    setIsCreatingNote(true)
+    setCreateNoteStatusMessage('Creating...')
+
+    try {
+      const result = await createNoteThroughEmacs(title)
+      if (!result.ok || !result.nodeId) {
+        throw new Error(result.message || 'Create failed')
+      }
+
+      setPendingCreatedNodeId(result.nodeId)
+      setCreateNoteTitle('')
+      setCreateNoteStatusMessage('')
+      setShowCreateNote(false)
+    } catch (error: any) {
+      setCreateNoteStatusMessage(error?.message || 'Create failed')
+    } finally {
+      setIsCreatingNote(false)
+    }
+  }, [createNoteThroughEmacs, createNoteTitle])
+
   const saveEditor = useCallback(async () => {
     const node = editorNodeRef.current
     if (!node) {
@@ -947,6 +1104,48 @@ export function GraphPage() {
     }
   }, [inNodeSearchMatches, inNodeSearchCurrentIndex])
 
+  useEffect(() => {
+    if (!showCreateNote) {
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      createNoteInputRef.current?.focus()
+    }, 50)
+
+    return () => clearTimeout(timeoutId)
+  }, [showCreateNote])
+
+  useEffect(() => {
+    if (!pendingCreatedNodeId) {
+      return
+    }
+
+    const createdNode = nodeByIdRef.current[pendingCreatedNodeId]
+    if (!createdNode) {
+      return
+    }
+
+    setPreviewNode(createdNode)
+  }, [graphData, pendingCreatedNodeId, setPreviewNode])
+
+  useEffect(() => {
+    if (!pendingCreatedNodeId) {
+      return
+    }
+
+    if ((previewNode as OrgRoamNode)?.id !== pendingCreatedNodeId) {
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      void openVimEditor()
+      setPendingCreatedNodeId(null)
+    }, 50)
+
+    return () => clearTimeout(timeoutId)
+  }, [openVimEditor, pendingCreatedNodeId, previewNode])
+
   // Global vim keybindings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -957,9 +1156,15 @@ export function GraphPage() {
       const tag = (document.activeElement?.tagName || '').toLowerCase()
       const isInput = tag === 'input' || tag === 'textarea' || tag === 'select'
 
-      if (e.altKey && e.key.toLowerCase() === 'f' && isOpen) {
-        e.preventDefault()
-        toggleNodeFullscreen()
+      if (showCreateNote) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          closeCreateNoteModal()
+        }
+        return
+      }
+
+      if (showVimHelp && e.key !== '?' && e.key !== 'Escape') {
         return
       }
 
@@ -1053,6 +1258,16 @@ export function GraphPage() {
         case 't':
           e.preventDefault()
           setThreeDim((value) => !value)
+          break
+        case 'c':
+          e.preventDefault()
+          openCreateNoteModal()
+          break
+        case 'f':
+          if (isOpen) {
+            e.preventDefault()
+            toggleNodeFullscreen()
+          }
           break
         case 'Tab':
           if (isOpen) {
@@ -1151,16 +1366,19 @@ export function GraphPage() {
     canRedo,
     canUndo,
     clearInNodeSearch,
+    closeCreateNoteModal,
     closePreview,
     inNodeSearchCurrentIndex,
     inNodeSearchMatches,
     isEditorMode,
     isOpen,
     nextPreviewNode,
+    openCreateNoteModal,
     openVimEditor,
     pendingKey,
     previousPreviewNode,
     setThreeDim,
+    showCreateNote,
     showVimHelp,
     toggleNodeFullscreen,
     touchControlsVisible,
@@ -1246,7 +1464,6 @@ export function GraphPage() {
       >
         <SearchBar
           graphData={graphData}
-          nodeById={nodeByIdRef.current!}
           setPreviewNode={setPreviewNode}
           graphRef={graphRef}
           threeDim={threeDim}
@@ -1260,6 +1477,17 @@ export function GraphPage() {
           inputRef={searchInputRef}
           aboveSidebar={isOpen}
         />
+        {!isOpen && (
+          <Box className="top-action-bar">
+            <Button
+              size="sm"
+              leftIcon={<AddIcon />}
+              onClick={openCreateNoteModal}
+            >
+              New
+            </Button>
+          </Box>
+        )}
         {touchControlsVisible && !isOpen && (
           <Box className="touch-controls-top-left">
             <Button size="sm" className="graph-mode-toggle" onClick={() => setThreeDim((value) => !value)}>
@@ -1269,12 +1497,13 @@ export function GraphPage() {
         )}
         {!isOpen && (
           <Box className="touch-controls-toggle">
-            <IconButton
+            <Button
               size="sm"
               aria-label={touchControlsVisible ? 'Hide interface controls' : 'Show interface controls'}
-              icon={touchControlsVisible ? <ViewOffIcon /> : <ViewIcon />}
               onClick={() => setTouchControlsVisible((value) => !value)}
-            />
+            >
+              {touchControlsVisible ? 'Hide UI' : 'UI'}
+            </Button>
           </Box>
         )}
         <Box position="absolute">
@@ -1342,6 +1571,7 @@ export function GraphPage() {
             onSaveEditor: saveEditor,
             onWriteQuitEditor: writeQuitEditor,
             onQuitEditor: quitEditor,
+            onToggleFullscreen: toggleNodeFullscreen,
             editorDirty,
             editorStatusMessage,
             onCloseNode: closePreview,
@@ -1381,6 +1611,18 @@ export function GraphPage() {
         {showVimHelp && (
           <VimHelp onClose={() => setShowVimHelp(false)} />
         )}
+        <CreateNoteModal
+          isOpen={showCreateNote}
+          title={createNoteTitle}
+          statusMessage={createNoteStatusMessage}
+          isSubmitting={isCreatingNote}
+          inputRef={createNoteInputRef}
+          onChangeTitle={setCreateNoteTitle}
+          onClose={closeCreateNoteModal}
+          onSubmit={() => {
+            void createNote()
+          }}
+        />
       </Box>
     </VariablesContext.Provider>
   )

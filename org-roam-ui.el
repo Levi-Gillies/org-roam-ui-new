@@ -33,10 +33,12 @@
 ;;; Code:
 ;;;; Dependencies
 (require 'json)
+(require 'subr-x)
 (require 'simple-httpd)
 (require 'org-roam)
 (require 'websocket)
 (require 'org-roam-dailies)
+(require 'org-id)
 
 (defgroup org-roam-ui nil
   "UI in Org-roam."
@@ -273,6 +275,48 @@ OK indicates success. MESSAGE is optional detail."
       (data . ((ok . ,(if ok t :json-false))
                (message . ,(or message ""))))))))
 
+(defun org-roam-ui--send-create-result (ws ok &optional node-id message)
+  "Send create result through websocket WS.
+OK indicates success. NODE-ID is the created node id when available."
+  (websocket-send-text
+   ws
+   (json-encode
+    `((type . "createResult")
+      (data . ((ok . ,(if ok t :json-false))
+               (nodeId . ,(or node-id ""))
+               (message . ,(or message ""))))))))
+
+(defun org-roam-ui--slugify-title (title)
+  "Convert TITLE into a filesystem-safe slug."
+  (let* ((downcased (downcase (string-trim (or title ""))))
+         (normalized (replace-regexp-in-string "[^[:alnum:]]+" "-" downcased))
+         (trimmed (replace-regexp-in-string "\\`-+\\|-+\\'" "" normalized)))
+    (if (string-empty-p trimmed) "note" trimmed)))
+
+(defun org-roam-ui--next-note-file-path (title)
+  "Return a unique org file path in `org-roam-directory' for TITLE."
+  (let* ((slug (org-roam-ui--slugify-title title))
+         (base (expand-file-name slug org-roam-directory))
+         (candidate (concat base ".org"))
+         (counter 1))
+    (while (file-exists-p candidate)
+      (setq candidate (format "%s-%d.org" base counter))
+      (setq counter (+ counter 1)))
+    candidate))
+
+(defun org-roam-ui--create-basic-node (title)
+  "Create a new top-level org-roam note for TITLE and return its id."
+  (let* ((trimmed-title (string-trim (or title "")))
+         (node-id (org-id-new))
+         (file-path (org-roam-ui--next-note-file-path trimmed-title))
+         (initial-text (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: %s\n\n"
+                               node-id
+                               trimmed-title)))
+    (make-directory (file-name-directory file-path) t)
+    (write-region initial-text nil file-path nil 'silent)
+    (org-roam-db-sync)
+    node-id))
+
 (defun org-roam-ui--save-node-text (id content)
   "Save CONTENT into org-roam node ID."
   (let* ((node (org-roam-populate (org-roam-node-create :id id)))
@@ -311,12 +355,26 @@ OK indicates success. MESSAGE is optional detail."
 
 (defun org-roam-ui--on-msg-create-node (data)
   "Create a node when receiving DATA from the websocket."
-  (progn
-    (if (and (fboundp #'orb-edit-note) (alist-get 'ROAM_REFS data))
-        (orb-edit-note (alist-get 'id data)))
-    (org-roam-capture-
-     :node (org-roam-node-create :title (alist-get 'title data))
-     :props '(:finalize find-file))))
+  (let ((title (alist-get 'title data))
+        (ref (or (alist-get 'ROAM_REFS data) (alist-get 'ref data))))
+    (condition-case err
+        (if ref
+            (progn
+              (when (and (fboundp #'orb-edit-note) (alist-get 'id data))
+                (orb-edit-note (alist-get 'id data)))
+              (org-roam-capture-
+               :node (org-roam-node-create :title title)
+               :props '(:finalize find-file)))
+          (let ((node-id (org-roam-ui--create-basic-node title)))
+            (org-roam-ui--send-variables org-roam-ui-ws-socket)
+            (org-roam-ui--send-graphdata)
+            (org-roam-ui--send-create-result org-roam-ui-ws-socket t node-id "Created")))
+      (error
+       (org-roam-ui--send-create-result
+        org-roam-ui-ws-socket
+        nil
+        nil
+        (error-message-string err))))))
 
 (defun org-roam-ui--ws-on-close (_websocket)
   "What to do when _WEBSOCKET to org-roam-ui is closed."

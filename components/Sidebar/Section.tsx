@@ -20,6 +20,10 @@ export const Section = (props: SectionProps) => {
     setOpen(!collapse)
   }, [collapse])
 
+  const toggleOpen = () => {
+    setOpen((value) => !value)
+  }
+
   if (className === 'h0Wrapper headingWrapper') {
     return <Box className="preHeadingContent"> {children}</Box>
   }
@@ -27,19 +31,33 @@ export const Section = (props: SectionProps) => {
   return (
     <Box className={'sec'}>
       <Box display="block">
-        <Flex className="headingFlex" alignItems="baseline">
+        <Flex
+          className="headingFlex"
+          alignItems="baseline"
+          cursor="pointer"
+          onClick={(event) => {
+            const target = event.target as HTMLElement
+            if (target.closest('a, button')) {
+              return
+            }
+            toggleOpen()
+          }}
+        >
           {open && kids.length > 0 ? (
             <>
               <IconButton
                 className="viewerHeadingButton"
                 _focus={{}}
                 _active={{}}
-                aria-label="Expand heading"
+                aria-label="Collapse heading"
                 //mr={1}
                 size="xs"
                 variant="subtle"
                 icon={<ChevronUpIcon />}
-                onClick={() => setOpen(!open)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleOpen()
+                }}
                 height={2}
                 width={2}
               />
@@ -47,12 +65,15 @@ export const Section = (props: SectionProps) => {
                 className="outlineHeadingButton"
                 _focus={{}}
                 _active={{}}
-                aria-label="Expand heading"
+                aria-label="Collapse heading"
                 //mr={1}
                 size="xs"
                 variant="subtle"
                 icon={<VscCircleOutline />}
-                onClick={() => setOpen(!open)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleOpen()
+                }}
                 height={2}
                 width={2}
               />
@@ -63,27 +84,33 @@ export const Section = (props: SectionProps) => {
                 className="viewerHeadingButton"
                 _active={{}}
                 _focus={{}}
-                aria-label="Collapse heading"
+                aria-label="Expand heading"
                 //mr={1}
                 height={2}
                 width={2}
                 size="xs"
                 variant="subtle"
                 icon={<ChevronDownIcon />}
-                onClick={() => setOpen(!open)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleOpen()
+                }}
               />
               <IconButton
                 className="outlineHeadingButton"
                 _active={{}}
                 _focus={{}}
-                aria-label="Collapse heading"
+                aria-label="Expand heading"
                 //mr={1}
                 height={2}
                 width={2}
                 size="xs"
                 variant="subtle"
                 icon={<VscCircleFilled />}
-                onClick={() => setOpen(!open)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleOpen()
+                }}
               />
             </>
           )}

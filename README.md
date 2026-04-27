@@ -17,9 +17,10 @@ The static site is served from `out/`, and the Emacs integration lives in `org-r
 - 2D and 3D graph modes
 - black node labels rendered above the nodes for readability
 - click a node to open it in a floating reader
+- `c` to create a new note from the browser and open it in the built-in editor
 - `/` to search the graph or search inside the open node
 - `e` to open the current node in Vim mode
-- `Alt+f` to toggle node fullscreen mode
+- `f` to toggle node fullscreen mode
 - `t` to toggle 2D/3D
 - optional touch UI for phone use
 
@@ -100,20 +101,24 @@ The frontend talks to Emacs over websocket on port `35903`.
 ### Graph
 
 - click a node to open it
+- press `c` to create a new note
 - press `/` to open graph search
 - press `t` to toggle 2D/3D
 - press `z z` to center on the current node
 
+Creating a note from the browser opens a compact title prompt, creates a new top-level `.org` note in your roam directory, refreshes the graph, and drops you into the built-in Vim editor for that note.
+
 ### Open Node
 
 - `Tab` toggles collapse/expand
+- click a heading to collapse or expand just that heading
 - `/` searches inside the open node
 - `n` and `N` move between in-node search matches
 - `j` / `k` scroll
 - `g g` jumps to top
 - `G` jumps to bottom
 - `Ctrl+d` / `Ctrl+u` half-page scroll
-- `Alt+f` toggles fullscreen for the open node
+- `f` toggles fullscreen for the open node
 - `Escape` closes search/help/sidebar
 
 ### Vim Mode
@@ -143,9 +148,9 @@ The touch UI is off by default.
 
 When no node is open:
 
-- tap the eye icon in the bottom-right to show or hide touch controls
+- tap the `UI` button in the bottom-right to show or hide touch controls
 - when enabled, the search bar appears
-- when enabled, the 2D/3D toggle appears in the top-left
+- when enabled, the `New` and `2D`/`3D` buttons sit on their own row below the search bar on small screens
 
 When a node is open:
 
@@ -159,11 +164,13 @@ When a node is open:
 | Key | Action |
 | --- | --- |
 | `/` | Search graph, or search inside the current node |
+| `c` | Create a new note |
 | `Escape` | Close search/help/sidebar |
 | `t` | Toggle 2D/3D |
 | `e` | Open current node in Vim mode |
-| `Alt+f` | Toggle fullscreen for the open node |
+| `f` | Toggle fullscreen for the open node |
 | `Tab` | Collapse/expand headings |
+| Click heading | Collapse/expand one heading |
 | `j` / `k` | Scroll node down / up |
 | `h` / `l` | Previous / next preview node |
 | `n` / `N` | Next / previous in-node search match |

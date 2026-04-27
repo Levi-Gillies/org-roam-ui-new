@@ -51,6 +51,7 @@ export interface SidebarProps {
   onSaveEditor?: () => Promise<boolean>
   onWriteQuitEditor?: () => Promise<boolean>
   onQuitEditor?: (force?: boolean) => Promise<boolean>
+  onToggleFullscreen?: () => void
   editorDirty?: boolean
   editorStatusMessage?: string
   previewRefreshToken?: number
@@ -95,6 +96,7 @@ const Sidebar = (props: SidebarProps) => {
     onSaveEditor,
     onWriteQuitEditor,
     onQuitEditor,
+    onToggleFullscreen,
     editorDirty,
     editorStatusMessage,
     previewRefreshToken,
@@ -161,6 +163,7 @@ const Sidebar = (props: SidebarProps) => {
               onSave={onSaveEditor || (async () => false)}
               onWriteQuit={onWriteQuitEditor || (async () => false)}
               onQuit={onQuitEditor || (async () => false)}
+              onToggleFullscreen={onToggleFullscreen || (() => undefined)}
             />
           ) : (
             <Scrollbars

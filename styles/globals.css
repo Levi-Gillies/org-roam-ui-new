@@ -89,6 +89,15 @@ h1 {
   z-index: 21;
 }
 
+.top-action-bar {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 31;
+  display: flex;
+  gap: 8px;
+}
+
 /* Floating sidebar */
 .floating-sidebar {
   position: fixed;
@@ -151,19 +160,33 @@ h1 {
   z-index: 32;
 }
 
+.top-action-bar .chakra-button,
 .touch-controls-top-left .graph-mode-toggle,
-.touch-controls-toggle .chakra-button {
-  min-width: 42px;
-  border: 1px solid rgba(0, 0, 0, 0.16);
-  background: rgba(255, 255, 255, 0.92);
-  color: #000;
+.touch-controls-toggle .chakra-button,
+.create-note-actions .chakra-button,
+.node-overlay-controls .chakra-button {
+  border: 1px solid rgba(240, 235, 224, 0.14);
+  background: rgba(20, 18, 15, 0.72);
+  color: #f0ebe0;
   font-family: 'VT323', 'Courier New', monospace;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.top-action-bar .chakra-button,
+.touch-controls-top-left .graph-mode-toggle,
+.touch-controls-toggle .chakra-button,
+.create-note-actions .chakra-button {
+  min-width: 72px;
 }
 
 .touch-controls-top-left .graph-mode-toggle:hover,
-.touch-controls-toggle .chakra-button:hover {
-  background: #fff;
+.touch-controls-toggle .chakra-button:hover,
+.top-action-bar .chakra-button:hover,
+.create-note-actions .chakra-button:hover,
+.node-overlay-controls .chakra-button:hover {
+  background: rgba(0, 0, 0, 0.52);
 }
 
 .node-overlay-controls {
@@ -180,15 +203,6 @@ h1 {
   min-width: 34px;
   height: 34px;
   border-radius: 999px;
-  border: 1px solid rgba(240, 235, 224, 0.14);
-  background: rgba(0, 0, 0, 0.32);
-  color: #f0ebe0;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.node-overlay-controls .chakra-button:hover {
-  background: rgba(0, 0, 0, 0.52);
 }
 
 /* Vim help overlay */
@@ -244,6 +258,74 @@ h1 {
   height: 100vh;
   z-index: 24;
   background: rgba(0, 0, 0, 0.15);
+}
+
+/* Create note overlay */
+.create-note-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 26;
+  width: min(420px, calc(100vw - 24px));
+  border-radius: 12px;
+  background: rgba(20, 18, 15, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(240, 235, 224, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  color: #f0ebe0;
+  font-family: 'VT323', 'Courier New', monospace;
+}
+
+.create-note-overlay h2 {
+  font-size: 22px;
+  margin: 0 0 16px 0;
+  color: #61BB46;
+}
+
+.create-note-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 25;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.create-note-input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 235, 224, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: #f0ebe0;
+  font-family: inherit;
+  font-size: 18px;
+  outline: none;
+}
+
+.create-note-input::placeholder {
+  color: rgba(240, 235, 224, 0.45);
+}
+
+.create-note-input:focus {
+  border-color: rgba(97, 187, 70, 0.55);
+}
+
+.create-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.create-note-status {
+  margin-top: 12px;
+  color: rgba(240, 235, 224, 0.72);
+  font-size: 16px;
 }
 
 /* Dedicated Vim editor */
@@ -447,6 +529,11 @@ h1 {
   .search-container {
     top: 12px;
     width: calc(100vw - 24px);
+  }
+
+  .top-action-bar,
+  .touch-controls-top-left {
+    top: 60px;
   }
 
   .floating-sidebar {

@@ -21,6 +21,7 @@ interface VimNodeEditorProps {
   onSave: () => Promise<boolean>
   onWriteQuit: () => Promise<boolean>
   onQuit: (force?: boolean) => Promise<boolean>
+  onToggleFullscreen: () => void
 }
 
 let exCommandsRegistered = false
@@ -112,6 +113,7 @@ export const VimNodeEditor = ({
   onSave,
   onWriteQuit,
   onQuit,
+  onToggleFullscreen,
 }: VimNodeEditorProps) => {
   const editorRef = useRef<CodeMirror.Editor | null>(null)
   const [modeLabel, setModeLabel] = useState('NORMAL')
@@ -163,11 +165,6 @@ export const VimNodeEditor = ({
             scrollbarStyle: 'native',
             viewportMargin: Infinity,
             cursorHeight: 0.9,
-            extraKeys: {
-              'Alt-F': () => {
-                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', altKey: true }))
-              },
-            },
           }}
           editorDidMount={(editor) => {
             editorRef.current = editor
@@ -187,6 +184,10 @@ export const VimNodeEditor = ({
             onChange(nextValue)
           }}
           onKeyDown={(_editor, event) => {
+            if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'f' && modeLabel === 'NORMAL') {
+              event.preventDefault()
+              onToggleFullscreen()
+            }
             event.stopPropagation()
           }}
         />
